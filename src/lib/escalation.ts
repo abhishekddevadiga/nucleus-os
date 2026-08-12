@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { logActivity } from "./activity";
 import { notify, notifyMany } from "./notify";
-import { getProjectManagers, getCeoUserIds } from "./permissions";
+import { getProjectManagers, getOwnerUserIds } from "./permissions";
 
 // Deadline & escalation engine. Runs every minute (instrumentation
 // interval in-process, or POST /api/cron/escalations from an external cron) so
@@ -17,16 +17,15 @@ interface Rule {
   level: number;
 }
 
-async function resolveLadder(projectId: string, clientId: string, divisionId: string): Promise<Rule[]> {
+async function resolveLadder(projectId: string, businessId: string): Promise<Rule[]> {
   const rules = await db.escalationRule.findMany({ where: { enabled: true } });
   const byScope = (type: string, id: string) =>
     rules.filter((r) => r.scopeType === type && r.scopeId === id);
   const ladder =
     firstNonEmpty(
       byScope("project", projectId),
-      byScope("client", clientId),
-      byScope("division", divisionId),
-      rules.filter((r) => r.scopeType === "company")
+      byScope("business", businessId),
+      rules.filter((r) => r.scopeType === "organization")
     ) ?? [];
   return ladder.sort((a, b) => a.level - b.level);
 }
@@ -44,13 +43,13 @@ export async function runEscalationSweep(): Promise<{ fired: number; checked: nu
   const tasks = await db.task.findMany({
     where: { archivedAt: null, completedAt: null, escalationLevel: { lt: 4 } },
     include: {
-      project: { include: { client: true } },
+      project: { include: { business: true } },
       assignee: true,
     },
   });
 
   for (const task of tasks) {
-    const ladder = await resolveLadder(task.projectId, task.project.clientId, task.project.client.divisionId);
+    const ladder = await resolveLadder(task.projectId, task.project.businessId);
     for (const rule of ladder) {
       if (task.escalationLevel >= rule.level) continue;
       const triggerAt = new Date(task.dueDate.getTime() + rule.offsetHours * 3600 * 1000);
@@ -60,24 +59,6 @@ export async function runEscalationSweep(): Promise<{ fired: number; checked: nu
       task.escalationLevel = rule.level; // keep local copy in sync for next rung
       fired++;
     }
-  }
-
-  // Invoices: auto-overdue on due-date cross.
-  const overdueInvoices = await db.invoice.findMany({
-    where: { archivedAt: null, status: { in: ["sent", "partial"] }, dueDate: { lt: now } },
-  });
-  for (const inv of overdueInvoices) {
-    await db.invoice.update({ where: { id: inv.id }, data: { status: "overdue" } });
-    await logActivity({
-      entityType: "invoice",
-      entityId: inv.id,
-      action: "escalation.invoice_overdue",
-      fromValue: inv.status,
-      toValue: "overdue",
-      clientId: inv.clientId,
-      projectId: inv.projectId,
-    });
-    fired++;
   }
 
   return { fired, checked: tasks.length };
@@ -91,7 +72,7 @@ async function fireRule(
     dueDate: Date;
     projectId: string;
     assigneeId: string;
-    project: { clientId: string; name: string };
+    project: { businessId: string; name: string };
     assignee: { name: string };
   },
   rule: Rule,
@@ -102,7 +83,7 @@ async function fireRule(
     entityType,
     entityId: task.id,
     projectId: task.projectId,
-    clientId: task.project.clientId,
+    businessId: task.project.businessId,
     taskId: task.id,
   };
 
@@ -135,11 +116,11 @@ async function fireRule(
       });
       break;
     }
-    case "escalate_ceo": {
+    case "escalate_owner": {
       await db.task.update({ where: { id: task.id }, data: { escalationLevel: rule.level } });
-      await logActivity({ ...base, action: "escalation.ceo", toValue: "T+24h" });
-      const ceos = await getCeoUserIds();
-      await notifyMany(ceos, {
+      await logActivity({ ...base, action: "escalation.owner", toValue: "T+24h" });
+      const owners = await getOwnerUserIds();
+      await notifyMany(owners, {
         type: "escalation",
         title: `Escalated (24h overdue): ${task.title}`,
         body: `${task.assignee.name} · ${task.project.name}`,
@@ -155,8 +136,8 @@ async function fireRule(
       });
       await logActivity({ ...base, action: "escalation.review_scheduled", toValue: "deadline edits locked" });
       const managers = await getProjectManagers(task.projectId);
-      const ceos = await getCeoUserIds();
-      await notifyMany([...managers, ...ceos, task.assigneeId], {
+      const owners = await getOwnerUserIds();
+      await notifyMany([...managers, ...owners, task.assigneeId], {
         type: "escalation",
         title: `Review scheduled (48h overdue): ${task.title}`,
         body: `Silent deadline edits are now locked. ${task.assignee.name} · ${task.project.name}`,
