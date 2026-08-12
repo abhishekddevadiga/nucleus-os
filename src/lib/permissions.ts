@@ -2,37 +2,69 @@ import { db } from "./db";
 import type { SessionUser } from "./auth";
 
 // Role-scope resolution. Roles are assigned per scope; visibility:
-//  - CEO / Finance: everything
-//  - Sales: all deals + all clients (read), plus anything scoped to them
-//  - Lead: divisions/clients/projects they lead — full view inside scope
+//  - Owner: everything
+//  - Lead: businesses/projects they lead — full view inside scope
 //  - Member: projects where they hold tasks, watch tasks, or are members
 
-export async function getVisibleProjectIds(user: SessionUser): Promise<string[] | "all"> {
-  if (user.isCeo || user.isFinance) return "all";
+export async function getVisibleBusinessIds(user: SessionUser): Promise<string[] | "all"> {
+  if (user.isOwner) return "all";
 
   const ids = new Set<string>();
 
-  const leadDivisionIds = user.roles.filter((r) => r.role === "lead" && r.scopeType === "division").map((r) => r.scopeId);
-  const leadClientIds = user.roles.filter((r) => r.role === "lead" && r.scopeType === "client").map((r) => r.scopeId);
+  const leadBusinessIds = user.roles.filter((r) => r.role === "lead" && r.scopeType === "business").map((r) => r.scopeId);
   const leadProjectIds = user.roles.filter((r) => r.role === "lead" && r.scopeType === "project").map((r) => r.scopeId);
-  const companyLead = user.roles.some((r) => r.role === "lead" && r.scopeType === "company");
-  if (companyLead) return "all";
+  const orgLead = user.roles.some((r) => r.role === "lead" && r.scopeType === "organization");
+  if (orgLead) return "all";
 
-  if (leadDivisionIds.length || leadClientIds.length) {
+  if (leadBusinessIds.length) {
+    leadBusinessIds.forEach((id) => ids.add(id));
+  }
+
+  // Businesses from projects they lead or are members of
+  if (leadProjectIds.length) {
     const projects = await db.project.findMany({
-      where: {
-        OR: [
-          ...(leadClientIds.length ? [{ clientId: { in: leadClientIds } }] : []),
-          ...(leadDivisionIds.length ? [{ client: { divisionId: { in: leadDivisionIds } } }] : []),
-        ],
-      },
+      where: { id: { in: leadProjectIds } },
+      select: { businessId: true },
+      distinct: ["businessId"],
+    });
+    projects.forEach((p) => ids.add(p.businessId));
+  }
+
+  // Businesses from projects where they're a member or have tasks
+  const [memberships, taskProjects] = await Promise.all([
+    db.projectMember.findMany({ where: { userId: user.id }, select: { project: { select: { businessId: true } } } }),
+    db.taskBusiness.findMany({
+      where: { task: { assigneeId: user.id, archivedAt: null } },
+      select: { businessId: true },
+      distinct: ["businessId"],
+    }),
+  ]);
+  memberships.forEach((m) => ids.add(m.project.businessId));
+  taskProjects.forEach((t) => ids.add(t.businessId));
+
+  return [...ids];
+}
+
+export async function getVisibleProjectIds(user: SessionUser): Promise<string[] | "all"> {
+  if (user.isOwner) return "all";
+
+  const ids = new Set<string>();
+
+  const leadBusinessIds = user.roles.filter((r) => r.role === "lead" && r.scopeType === "business").map((r) => r.scopeId);
+  const leadProjectIds = user.roles.filter((r) => r.role === "lead" && r.scopeType === "project").map((r) => r.scopeId);
+  const orgLead = user.roles.some((r) => r.role === "lead" && r.scopeType === "organization");
+  if (orgLead) return "all";
+
+  if (leadBusinessIds.length) {
+    const projects = await db.project.findMany({
+      where: { businessId: { in: leadBusinessIds } },
       select: { id: true },
     });
     projects.forEach((p) => ids.add(p.id));
   }
   leadProjectIds.forEach((id) => ids.add(id));
 
-  // membership + own/watched tasks + PM
+  // membership + own/watched tasks
   const [memberships, taskProjects, owned] = await Promise.all([
     db.projectMember.findMany({ where: { userId: user.id }, select: { projectId: true } }),
     db.task.findMany({
@@ -62,11 +94,11 @@ export function taskProjectWhere(visible: string[] | "all") {
   return visible === "all" ? {} : { projectId: { in: visible } };
 }
 
-// Leads for a given project: the PM + leads scoped to the project/client/division + CEO.
+// Leads for a given project: the PM + leads scoped to the project/business + Owner.
 export async function getProjectManagers(projectId: string): Promise<string[]> {
   const project = await db.project.findUnique({
     where: { id: projectId },
-    include: { client: true },
+    include: { business: true },
   });
   if (!project) return [];
   const assignments = await db.roleAssignment.findMany({
@@ -74,8 +106,7 @@ export async function getProjectManagers(projectId: string): Promise<string[]> {
       role: "lead",
       OR: [
         { scopeType: "project", scopeId: projectId },
-        { scopeType: "client", scopeId: project.clientId },
-        { scopeType: "division", scopeId: project.client.divisionId },
+        { scopeType: "business", scopeId: project.businessId },
       ],
     },
     select: { userId: true },
@@ -83,17 +114,17 @@ export async function getProjectManagers(projectId: string): Promise<string[]> {
   return [...new Set([project.ownerId, ...assignments.map((a) => a.userId)])];
 }
 
-export async function getCeoUserIds(): Promise<string[]> {
+export async function getOwnerUserIds(): Promise<string[]> {
   const assignments = await db.roleAssignment.findMany({
-    where: { role: "ceo" },
+    where: { role: "owner" },
     select: { userId: true },
   });
   return [...new Set(assignments.map((a) => a.userId))];
 }
 
-// PM check used by approval flows: PM of project, lead in scope, or CEO.
+// Lead check used by approval flows: lead of project/business, or owner.
 export async function canManageProject(user: SessionUser, projectId: string): Promise<boolean> {
-  if (user.isCeo) return true;
+  if (user.isOwner) return true;
   const managers = await getProjectManagers(projectId);
   return managers.includes(user.id);
 }

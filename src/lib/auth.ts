@@ -3,7 +3,6 @@ import { createHmac, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { cache } from "react";
 import { db } from "./db";
-import type { Role } from "./constants";
 import { BRAND } from "./brand";
 
 const COOKIE_NAME = `${BRAND.slug}_session`;
@@ -56,10 +55,8 @@ export type SessionUser = {
   title: string | null;
   capacityHours: number;
   avatarColor: string;
-  roles: { role: Role; scopeType: string; scopeId: string }[];
-  isCeo: boolean;
-  isFinance: boolean;
-  isSales: boolean;
+  roles: { role: string; scopeType: string; scopeId: string }[];
+  isOwner: boolean;
   isLead: boolean;
 };
 
@@ -77,7 +74,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   if (!session || session.expiresAt < new Date() || session.user.archivedAt) return null;
   const u = session.user;
   const roles = u.roleAssignments.map((r) => ({
-    role: r.role as Role,
+    role: r.role,
     scopeType: r.scopeType,
     scopeId: r.scopeId,
   }));
@@ -89,9 +86,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     capacityHours: u.capacityHours,
     avatarColor: u.avatarColor,
     roles,
-    isCeo: roles.some((r) => r.role === "ceo"),
-    isFinance: roles.some((r) => r.role === "finance"),
-    isSales: roles.some((r) => r.role === "sales"),
+    isOwner: roles.some((r) => r.role === "owner"),
     isLead: roles.some((r) => r.role === "lead"),
   };
 });
