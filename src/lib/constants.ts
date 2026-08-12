@@ -1,225 +1,314 @@
-// Enum-like constants used across the app (schema keeps them as strings so
-// SQLite dev and Postgres prod share one schema).
+// ============================================================================
+// AIKYAA CONSTANTS
+// Domain vocabulary, defaults, and reference data.
+// ============================================================================
 
-export const CLIENT_KINDS = ["external", "internal"] as const;
-export type ClientKind = (typeof CLIENT_KINDS)[number];
-
-export const ROLES = ["ceo", "lead", "member", "sales", "finance"] as const;
-export type Role = (typeof ROLES)[number];
-
-export const ROLE_LABELS: Record<Role, string> = {
-  ceo: "CEO / Head of Operations",
-  lead: "Division / Brand Lead (PM)",
-  member: "Team Member",
-  sales: "Sales / BD",
-  finance: "Finance",
-};
-
-export const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
-export type Priority = (typeof PRIORITIES)[number];
-
-export const TICKET_TYPES = ["change", "bug", "revision"] as const;
-
-export const SERVICE_DEAL_STAGES = [
-  "lead",
-  "qualified",
-  "proposal",
-  "negotiation",
-  "won",
-  "lost",
-] as const;
-
-export const BRAND_DEAL_STAGES = [
-  "outreach",
-  "in_talks",
-  "terms",
-  "signed",
-  "deliverables",
-  "completed",
-  "paid",
-] as const;
-
-export const DEAL_STAGE_LABELS: Record<string, string> = {
+// Role model: three-tier permission structure + job function via Department/Skills.
+export const ROLES = ["owner", "lead", "member"] as const;
+export const ROLE_LABELS = {
+  owner: "Owner",
   lead: "Lead",
-  qualified: "Qualified",
-  proposal: "Proposal",
-  negotiation: "Negotiation",
-  won: "Won",
-  lost: "Lost",
-  outreach: "Outreach",
-  in_talks: "In talks",
-  terms: "Terms",
-  signed: "Signed",
-  deliverables: "Deliverables in progress",
+  member: "Team Member",
+} as const;
+
+// Task priority levels.
+export const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
+export const PRIORITY_LABELS = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+} as const;
+
+// Ticket types (for tasks in the Change Requests workstream).
+export const TICKET_TYPES = ["change", "bug", "revision"] as const;
+export const TICKET_TYPE_LABELS = {
+  change: "Change Request",
+  bug: "Bug",
+  revision: "Revision",
+} as const;
+
+// Business status lifecycle.
+export const BUSINESS_STATUSES = ["planned", "active", "paused", "sunset"] as const;
+export const BUSINESS_STATUS_LABELS = {
+  planned: "Planned",
+  active: "Active",
+  paused: "Paused",
+  sunset: "Sunset",
+} as const;
+
+// Task/Project status.
+export const PROJECT_STATUSES = ["active", "completed", "archived"] as const;
+export const PROJECT_STATUS_LABELS = {
+  active: "Active",
   completed: "Completed",
-  paid: "Paid",
-};
+  archived: "Archived",
+} as const;
 
-export const INVOICE_STATUSES = ["draft", "sent", "partial", "paid", "overdue"] as const;
+// Milestone status.
+export const MILESTONE_STATUSES = ["pending", "completed"] as const;
 
-export const ASSET_TYPES = ["footage", "master", "final", "doc", "image", "design", "other"] as const;
-
-// Stale-deal detection default
-export const STALE_DEAL_DAYS = 5;
-
-// Default escalation ladder — seeded as company-scope EscalationRule
-// rows; timings editable in Admin. offsetHours is relative to the due date.
-export const DEFAULT_ESCALATION_LADDER = [
-  { offsetHours: -24, action: "remind_assignee", level: 1 },
-  { offsetHours: 0, action: "mark_overdue_notify_pm", level: 2 },
-  { offsetHours: 24, action: "escalate_ceo", level: 3 },
-  { offsetHours: 48, action: "schedule_review_lock", level: 4 },
+// Notification types.
+export const NOTIFICATION_TYPES = [
+  "reminder",
+  "overdue",
+  "escalation",
+  "assignment",
+  "extension",
+  "digest",
+  "announcement",
+  "meeting",
 ] as const;
 
-export const ESCALATION_ACTION_LABELS: Record<string, string> = {
-  remind_assignee: "Remind assignee",
-  mark_overdue_notify_pm: "Mark OVERDUE + notify PM",
-  escalate_ceo: "Escalate to owner / ops",
-  schedule_review_lock: "Schedule review + lock deadline edits",
-};
+// User availability states.
+export const AVAILABILITY_STATUSES = ["available", "reduced", "on_leave"] as const;
 
-// Default verticals shipped with the system. All editable in-app.
-export const DEFAULT_VERTICALS: { name: string; slug: string; isSystem?: boolean; stages: string[] }[] = [
-  { name: "Strategy", slug: "strategy", stages: ["Research", "Positioning", "Strategy doc", "Internal review", "Client review", "Approved"] },
-  { name: "Launch strategy", slug: "launch-strategy", stages: ["Plan", "Assets mapped", "Timeline locked", "Pre-launch", "Launch live", "Post-mortem"] },
-  { name: "Scripting", slug: "scripting", stages: ["Brief", "Draft", "Internal review", "Revisions", "Locked"] },
-  { name: "Shoots", slug: "shoots", stages: ["Shot list", "Scheduling", "Pre-production", "Shoot day", "Footage handover"] },
-  { name: "Edits", slug: "edits", stages: ["Ingest", "Rough cut", "Internal review", "Fine cut", "Color & sound", "Final export"] },
-  { name: "Variations", slug: "variations", stages: ["Master approved", "Variation matrix defined", "Batch in production", "QC", "Delivered"] },
-  { name: "Content", slug: "content", stages: ["Calendar", "Creation", "Review", "Scheduled", "Published"] },
-  { name: "Tech / Dev", slug: "tech", stages: ["Scoped", "In development", "Code review", "QA", "Client UAT", "Deployed"] },
-  { name: "Media / Performance", slug: "media", stages: ["Brief", "Setup", "Live", "Optimization", "Reporting", "Closed"] },
-  { name: "Change Requests", slug: "change-requests", isSystem: true, stages: ["Raised", "Triaged", "Approved", "In progress", "Done", "Verified"] },
+// Task/Project statuses for filtering and display.
+export const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
+
+// ============================================================================
+// WORKSTREAMS & PIPELINE STAGES
+//
+// Default workstreams are per-business service lines. When a new business
+// is created, the user can "bootstrap" these as starter templates.
+// Not all businesses need all workstreams — this is just a reference set.
+// ============================================================================
+
+export interface WorkstreamTemplate {
+  name: string;
+  slug: string;
+  stages: string[];
+  isSystem?: boolean;
+}
+
+export const DEFAULT_WORKSTREAMS: WorkstreamTemplate[] = [
+  {
+    name: "Strategy",
+    slug: "strategy",
+    stages: ["Scoped", "In progress", "Review", "Approved"],
+  },
+  {
+    name: "Planning",
+    slug: "planning",
+    stages: ["Backlog", "Planned", "Ready", "In progress", "Done"],
+  },
+  {
+    name: "Execution",
+    slug: "execution",
+    stages: ["To do", "In progress", "Review", "QA", "Done"],
+  },
+  {
+    name: "Launch",
+    slug: "launch",
+    stages: ["Pre-launch", "Launch", "Post-launch"],
+  },
+  {
+    name: "Change Requests",
+    slug: "change-requests",
+    stages: ["Raised", "Triaged", "Approved", "In progress", "Done", "Verified"],
+    isSystem: true,
+  },
 ];
 
 export const CHANGE_REQUEST_SLUG = "change-requests";
 
-// Project templates. Stored in DB (editable) and seeded from here.
-// Task offsets are relative to project start; negative milestone offsets would
-// be relative to end date in a launch context — v1 keeps everything relative
-// to start for predictability.
-export interface TemplateConfig {
-  verticals: string[]; // vertical slugs
-  milestones: { title: string; offsetDays: number; billable: boolean; amountPct?: number }[];
-  tasks: { title: string; vertical: string; offsetDays: number; estimateHours: number; priority: Priority }[];
+// ============================================================================
+// WORKLOAD THRESHOLDS
+//
+// Capacity management: when does a team member become overloaded?
+// ============================================================================
+
+export const WORKLOAD_AMBER = 0.85; // 85% of capacity = amber (warning)
+export const WORKLOAD_RED = 1.0;   // 100% of capacity = red (overloaded)
+
+// Task priority sort order.
+export const PRIORITY_ORDER: Record<string, number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+// ============================================================================
+// DEFAULT ESCALATION LADDER
+//
+// When a task's deadline passes, what actions fire at what intervals?
+// ============================================================================
+
+export interface EscalationRuleTemplate {
+  offsetHours: number;
+  action: string;
+  level: number;
 }
 
-export const DEFAULT_TEMPLATES: { key: string; name: string; description: string; config: TemplateConfig }[] = [
+export const DEFAULT_ESCALATION_LADDER: EscalationRuleTemplate[] = [
+  { offsetHours: -24, action: "remind_assignee", level: 1 },
+  { offsetHours: 0, action: "mark_overdue_notify_pm", level: 2 },
+  { offsetHours: 24, action: "escalate_owner", level: 3 },
+  { offsetHours: 48, action: "schedule_review_lock", level: 4 },
+];
+
+export const ESCALATION_ACTION_LABELS = {
+  remind_assignee: "Remind assignee",
+  mark_overdue_notify_pm: "Mark overdue & notify lead",
+  escalate_owner: "Escalate to owner",
+  schedule_review_lock: "Schedule review & lock deadline",
+} as const;
+
+// ============================================================================
+// PROJECT TEMPLATES
+//
+// Blueprints for spinning up new projects quickly.
+// ============================================================================
+
+export interface ProjectTemplateConfig {
+  workstreams: string[]; // slugs of workstreams to attach
+  milestones: Array<{
+    title: string;
+    offsetDays: number;
+  }>;
+  tasks: Array<{
+    title: string;
+    workstream: string; // slug
+    offsetDays: number;
+    estimateHours: number;
+    priority: string;
+  }>;
+}
+
+export interface ProjectTemplateData {
+  key: string;
+  name: string;
+  description: string;
+  config: ProjectTemplateConfig;
+}
+
+export const DEFAULT_TEMPLATES: ProjectTemplateData[] = [
   {
-    key: "course-launch",
-    name: "Course Launch",
-    description: "Full launch: strategy, scripts, shoots, edits, variations, media.",
+    key: "product-launch",
+    name: "Product Launch",
+    description: "Strategy → Planning → Execution → Launch for a new product",
     config: {
-      verticals: ["strategy", "launch-strategy", "scripting", "shoots", "edits", "variations", "media", "change-requests"],
+      workstreams: ["strategy", "planning", "execution", "launch", "change-requests"],
       milestones: [
-        { title: "Strategy locked", offsetDays: 7, billable: true, amountPct: 20 },
-        { title: "Scripts locked", offsetDays: 14, billable: false },
-        { title: "All masters delivered", offsetDays: 30, billable: true, amountPct: 40 },
-        { title: "Launch live", offsetDays: 42, billable: true, amountPct: 40 },
+        { title: "Strategy approved", offsetDays: 14 },
+        { title: "Planning complete", offsetDays: 28 },
+        { title: "Execution halfway", offsetDays: 42 },
+        { title: "Launch ready", offsetDays: 56 },
       ],
       tasks: [
-        { title: "Audience & offer research", vertical: "strategy", offsetDays: 3, estimateHours: 8, priority: "high" },
-        { title: "Positioning & launch narrative", vertical: "strategy", offsetDays: 6, estimateHours: 6, priority: "high" },
-        { title: "Launch plan & timeline", vertical: "launch-strategy", offsetDays: 8, estimateHours: 6, priority: "high" },
-        { title: "Script: hero VSL", vertical: "scripting", offsetDays: 12, estimateHours: 10, priority: "high" },
-        { title: "Scripts: ad hooks batch 1", vertical: "scripting", offsetDays: 14, estimateHours: 8, priority: "medium" },
-        { title: "Shoot day: hero + ads", vertical: "shoots", offsetDays: 20, estimateHours: 10, priority: "high" },
-        { title: "Edit: hero VSL master", vertical: "edits", offsetDays: 26, estimateHours: 16, priority: "high" },
-        { title: "Variation matrix: hero (sizes/hooks/langs)", vertical: "variations", offsetDays: 32, estimateHours: 12, priority: "medium" },
-        { title: "Media plan & campaign setup", vertical: "media", offsetDays: 36, estimateHours: 8, priority: "high" },
+        { title: "Market research", workstream: "strategy", offsetDays: 7, estimateHours: 20, priority: "high" },
+        { title: "Requirements gathering", workstream: "planning", offsetDays: 14, estimateHours: 16, priority: "high" },
+        { title: "Design system", workstream: "execution", offsetDays: 21, estimateHours: 40, priority: "high" },
+        { title: "Development sprint 1", workstream: "execution", offsetDays: 35, estimateHours: 80, priority: "high" },
+        { title: "QA & launch prep", workstream: "launch", offsetDays: 50, estimateHours: 20, priority: "high" },
       ],
     },
   },
   {
-    key: "abm-retainer",
-    name: "ABM Retainer",
-    description: "Monthly retainer: strategy, content, media, change requests.",
+    key: "feature-delivery",
+    name: "Feature Delivery",
+    description: "Plan, build, and ship a single product feature",
     config: {
-      verticals: ["strategy", "content", "media", "change-requests"],
+      workstreams: ["planning", "execution", "change-requests"],
       milestones: [
-        { title: "Month 1 review", offsetDays: 30, billable: true, amountPct: 100 },
+        { title: "Spec review", offsetDays: 7 },
+        { title: "Development done", offsetDays: 21 },
+        { title: "Shipped", offsetDays: 28 },
       ],
       tasks: [
-        { title: "Account list & ICP refresh", vertical: "strategy", offsetDays: 5, estimateHours: 6, priority: "high" },
-        { title: "Content calendar (month)", vertical: "content", offsetDays: 7, estimateHours: 4, priority: "medium" },
-        { title: "Campaign setup & QA", vertical: "media", offsetDays: 10, estimateHours: 6, priority: "high" },
-        { title: "Weekly optimization pass", vertical: "media", offsetDays: 14, estimateHours: 4, priority: "medium" },
+        { title: "Write spec", workstream: "planning", offsetDays: 5, estimateHours: 8, priority: "high" },
+        { title: "Development", workstream: "execution", offsetDays: 20, estimateHours: 40, priority: "high" },
+        { title: "Code review", workstream: "execution", offsetDays: 22, estimateHours: 4, priority: "high" },
+        { title: "Deployment", workstream: "execution", offsetDays: 28, estimateHours: 2, priority: "high" },
       ],
     },
   },
   {
-    key: "funnel-build",
-    name: "Funnel Build",
-    description: "Landing pages, tech build, content, media launch.",
+    key: "campaign",
+    name: "Marketing Campaign",
+    description: "Plan, create, and launch a marketing campaign",
     config: {
-      verticals: ["strategy", "tech", "content", "media", "change-requests"],
+      workstreams: ["strategy", "planning", "execution", "change-requests"],
       milestones: [
-        { title: "Funnel map approved", offsetDays: 7, billable: true, amountPct: 30 },
-        { title: "Build complete (UAT)", offsetDays: 21, billable: true, amountPct: 40 },
-        { title: "Live + handover", offsetDays: 28, billable: true, amountPct: 30 },
+        { title: "Campaign brief approved", offsetDays: 10 },
+        { title: "Assets created", offsetDays: 24 },
+        { title: "Campaign live", offsetDays: 31 },
       ],
       tasks: [
-        { title: "Funnel map & copy brief", vertical: "strategy", offsetDays: 5, estimateHours: 8, priority: "high" },
-        { title: "Landing page build", vertical: "tech", offsetDays: 14, estimateHours: 20, priority: "high" },
-        { title: "Tracking & pixels QA", vertical: "tech", offsetDays: 18, estimateHours: 6, priority: "high" },
-        { title: "Page copy & creatives", vertical: "content", offsetDays: 12, estimateHours: 10, priority: "medium" },
-        { title: "Launch campaigns", vertical: "media", offsetDays: 24, estimateHours: 6, priority: "high" },
+        { title: "Campaign strategy", workstream: "strategy", offsetDays: 7, estimateHours: 16, priority: "high" },
+        { title: "Asset creation", workstream: "execution", offsetDays: 20, estimateHours: 32, priority: "high" },
+        { title: "Copy & messaging", workstream: "planning", offsetDays: 20, estimateHours: 12, priority: "high" },
+        { title: "Launch setup", workstream: "execution", offsetDays: 28, estimateHours: 8, priority: "high" },
       ],
     },
   },
   {
-    key: "tech-build",
-    name: "Tech Build",
-    description: "Scoped development engagement with UAT and deployment.",
+    key: "sprint",
+    name: "Sprint",
+    description: "One-week sprint for cross-functional work",
     config: {
-      verticals: ["tech", "change-requests"],
+      workstreams: ["execution", "change-requests"],
       milestones: [
-        { title: "Scope signed off", offsetDays: 5, billable: true, amountPct: 30 },
-        { title: "Feature complete", offsetDays: 25, billable: true, amountPct: 40 },
-        { title: "Deployed to production", offsetDays: 35, billable: true, amountPct: 30 },
+        { title: "Sprint review", offsetDays: 7 },
       ],
       tasks: [
-        { title: "Technical scoping doc", vertical: "tech", offsetDays: 4, estimateHours: 8, priority: "high" },
-        { title: "Core build sprint 1", vertical: "tech", offsetDays: 15, estimateHours: 40, priority: "high" },
-        { title: "QA pass & fixes", vertical: "tech", offsetDays: 28, estimateHours: 12, priority: "medium" },
-      ],
-    },
-  },
-  {
-    key: "brand-deal-fulfillment",
-    name: "Brand-Deal Fulfillment",
-    description: "Deliverables for a signed brand partnership (auto-used on deal Signed).",
-    config: {
-      verticals: ["scripting", "shoots", "edits", "content", "change-requests"],
-      milestones: [
-        { title: "Deliverables approved by partner", offsetDays: 21, billable: true, amountPct: 100 },
-      ],
-      tasks: [
-        { title: "Deliverables brief & concepts", vertical: "scripting", offsetDays: 4, estimateHours: 4, priority: "high" },
-        { title: "Shoot: sponsored content", vertical: "shoots", offsetDays: 10, estimateHours: 8, priority: "high" },
-        { title: "Edit: sponsored deliverables", vertical: "edits", offsetDays: 16, estimateHours: 10, priority: "high" },
-        { title: "Publish & report", vertical: "content", offsetDays: 20, estimateHours: 3, priority: "medium" },
-      ],
-    },
-  },
-  {
-    key: "product-sprint",
-    name: "Product Sprint",
-    description: "Two-week internal product sprint for your own products.",
-    config: {
-      verticals: ["tech", "content", "change-requests"],
-      milestones: [{ title: "Sprint review", offsetDays: 14, billable: false }],
-      tasks: [
-        { title: "Sprint planning & scope", vertical: "tech", offsetDays: 1, estimateHours: 3, priority: "high" },
-        { title: "Build sprint backlog", vertical: "tech", offsetDays: 10, estimateHours: 30, priority: "high" },
-        { title: "Release notes & changelog", vertical: "content", offsetDays: 13, estimateHours: 2, priority: "low" },
+        { title: "Sprint kickoff", workstream: "execution", offsetDays: 1, estimateHours: 2, priority: "medium" },
+        { title: "Daily standups", workstream: "execution", offsetDays: 6, estimateHours: 5, priority: "medium" },
       ],
     },
   },
 ];
 
-// Workload thresholds
-export const WORKLOAD_AMBER = 0.85;
-export const WORKLOAD_RED = 1.0;
+// ============================================================================
+// DEPARTMENTS
+//
+// Seeded default team departments (customizable in Admin).
+// ============================================================================
 
-export const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+export interface DepartmentData {
+  name: string;
+  slug: string;
+  sortOrder: number;
+}
+
+export const DEFAULT_DEPARTMENTS: DepartmentData[] = [
+  { name: "Design", slug: "design", sortOrder: 0 },
+  { name: "Development", slug: "development", sortOrder: 1 },
+  { name: "Marketing", slug: "marketing", sortOrder: 2 },
+  { name: "Operations", slug: "operations", sortOrder: 3 },
+  { name: "Strategy", slug: "strategy", sortOrder: 4 },
+];
+
+// ============================================================================
+// ASSET CATEGORIES
+//
+// The brand & resource hub's organizational structure.
+// Seeded, admin-extensible via the Asset Categories admin tab.
+// ============================================================================
+
+export interface AssetCategoryData {
+  key: string;
+  name: string;
+  icon?: string;
+  sortOrder: number;
+  isSystem?: boolean;
+}
+
+export const DEFAULT_ASSET_CATEGORIES: AssetCategoryData[] = [
+  { key: "brand-assets", name: "Brand Assets", icon: "🎨", sortOrder: 0, isSystem: true },
+  { key: "websites", name: "Websites", icon: "🌐", sortOrder: 1, isSystem: true },
+  { key: "design", name: "Design", icon: "✏️", sortOrder: 2, isSystem: true },
+  { key: "development", name: "Development", icon: "⚙️", sortOrder: 3, isSystem: true },
+  { key: "marketing", name: "Marketing", icon: "📢", sortOrder: 4, isSystem: true },
+  { key: "documents", name: "Documents", icon: "📄", sortOrder: 5, isSystem: true },
+  { key: "content", name: "Content", icon: "📹", sortOrder: 6, isSystem: true },
+  { key: "resources", name: "Custom Resources", icon: "📦", sortOrder: 7, isSystem: false },
+];
+
+// ============================================================================
+// STALE DEAL DETECTION (legacy, may be removed in future)
+// ============================================================================
+
+// How many days without activity before a deal is considered "stale"?
+export const STALE_DEAL_DAYS = 5;

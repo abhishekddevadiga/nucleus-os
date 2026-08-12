@@ -11,18 +11,18 @@
 
 export const BRAND = {
   /** Short name — used in the sidebar wordmark and as the company record. */
-  name: process.env.NEXT_PUBLIC_APP_NAME ?? "Nucleus",
+  name: process.env.NEXT_PUBLIC_APP_NAME ?? "Aikyaa",
 
   /** Full product name — used in page titles and the login screen. */
-  productName: process.env.NEXT_PUBLIC_APP_PRODUCT_NAME ?? "Nucleus OS",
+  productName: process.env.NEXT_PUBLIC_APP_PRODUCT_NAME ?? "Aikyaa",
 
   /** One-line description used in metadata. */
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION ??
-    "Projects, tasks, approvals, and money — one operating system for your team.",
+    "Operating system for managing multiple independent businesses — one team, one workspace.",
 
   /** Lowercase slug — used for cookie names and export filenames. */
-  slug: process.env.NEXT_PUBLIC_APP_SLUG ?? "nucleus",
+  slug: process.env.NEXT_PUBLIC_APP_SLUG ?? "aikyaa",
 
   /** Email domain used for placeholder text and the seeded admin account. */
   emailDomain: process.env.NEXT_PUBLIC_APP_EMAIL_DOMAIN ?? "example.com",

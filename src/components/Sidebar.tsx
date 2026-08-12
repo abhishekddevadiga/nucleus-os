@@ -16,7 +16,6 @@ function Wordmark() {
     <span className="flex items-center gap-2.5">
       <img src="/logo.svg" alt="" className="h-[26px] w-[26px] rounded-lg object-contain" />
       <span className="text-[15px] font-semibold tracking-tight text-slate-900">{BRAND.name}</span>
-      <span className="text-[15px] font-normal tracking-tight text-slate-400">OS</span>
     </span>
   );
 }

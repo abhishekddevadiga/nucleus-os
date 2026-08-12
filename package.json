@@ -1,8 +1,8 @@
 {
-  "name": "nucleus-os",
+  "name": "aikyaa",
   "version": "1.0.0",
   "private": true,
-  "description": "An operating system for running a services or product team: sales pipeline, projects, verticals, tasks with enforced deadlines, tickets, assets, milestones, invoices, and an immutable activity log.",
+  "description": "Operating system for managing multiple independent businesses — one team, one workspace. Projects, tasks, assets, milestones, and an immutable activity log.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

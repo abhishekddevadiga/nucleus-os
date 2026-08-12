@@ -1,9 +1,8 @@
-// Data model.
-// SQLite for dev; the schema is Postgres-compatible — switch the datasource
-// provider + DATABASE_URL for production. Enum-like fields are strings with
-// app-level constants (src/lib/constants.ts) so the schema works on both.
+// Aikyaa: Operating system for a parent organization managing multiple independent businesses.
+// SQLite for dev; Postgres-compatible — switch datasource provider + DATABASE_URL for production.
+// Enum-like fields are strings with app-level constants (src/lib/constants.ts).
 //
-// Non-negotiable constraints enforced here and in the service layer:
+// Core invariants enforced here and in the service layer:
 //   - Task.dueDate NOT NULL, exactly one assignee
 //   - ActivityLog is append-only (no update/delete code path exists;
 //     on Postgres additionally REVOKE UPDATE/DELETE on the table)
@@ -18,113 +17,229 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Company {
-  id        String     @id @default(cuid())
-  name      String
-  createdAt DateTime   @default(now())
-  divisions Division[]
-  verticals Vertical[]
-}
-
-model Division {
-  id         String    @id @default(cuid())
-  companyId  String
-  company    Company   @relation(fields: [companyId], references: [id])
-  name       String
-  slug       String    @unique
-  sortOrder  Int       @default(0)
-  archivedAt DateTime?
-  clients    Client[]
-}
-
-model Client {
-  id           String        @id @default(cuid())
-  divisionId   String
-  division     Division      @relation(fields: [divisionId], references: [id])
-  name         String
-  slug         String        @unique
-  kind         String // "external" | "internal"
-  contactName  String?
-  contactEmail String?
-  notes        String?
-  archivedAt   DateTime?
-  createdAt    DateTime      @default(now())
-  brandKit     BrandKit?
-  assets       Asset[]
-  deals        Deal[]
-  projects     Project[]
-  invoices     Invoice[]
-  accessGrants AccessGrant[]
-}
-
-model BrandKit {
-  id             String  @id @default(cuid())
-  clientId       String  @unique
-  client         Client  @relation(fields: [clientId], references: [id])
-  logoUrl        String?
-  colors         String? // JSON array of {name, hex}
-  fonts          String?
-  toneOfVoiceUrl String?
-  dosAndDonts    String?
-  notes          String?
-}
-
-model Asset {
-  id             String      @id @default(cuid())
-  clientId       String
-  client         Client      @relation(fields: [clientId], references: [id])
-  projectId      String?
-  project        Project?    @relation(fields: [projectId], references: [id])
-  verticalId     String?
-  vertical       Vertical?   @relation(fields: [verticalId], references: [id])
+// The foundation: an independent business unit under Aikyaa.
+model Business {
+  id             String   @id @default(cuid())
   name           String
-  url            String
-  type           String // "footage" | "master" | "final" | "doc" | "image" | "design" | "other"
-  version        Int         @default(1)
-  tags           String? // comma-separated
-  parentAssetId  String? // asset chaining: footage -> master -> variation
-  parentAsset    Asset?      @relation("AssetChain", fields: [parentAssetId], references: [id])
-  childAssets    Asset[]     @relation("AssetChain")
-  isDeliverable  Boolean     @default(false)
-  registeredById String
-  registeredBy   User        @relation(fields: [registeredById], references: [id])
+  slug           String   @unique
+  tagline        String?
+  description    String?
+  industry       String?  // free text, not enum — for flexible grouping/filtering
+  status         String   @default("active") // "planned" | "active" | "paused" | "sunset"
+  logoUrl        String?
+  coverImageUrl  String?
+  brandColors    String?  // JSON [{name, hex}] — lightweight, for chips/theming
+  launchDate     DateTime?
+  website        String?
+  contactEmail   String?
+  contactPhone   String?
+  socialLinks    String?  // JSON {twitter, instagram, linkedin, ...}
+  notes          String?
+  sortOrder      Int      @default(0)
   archivedAt     DateTime?
-  createdAt      DateTime    @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workstreams    Workstream[]
+  projects       Project[]        // primary business
+  projectLinks   ProjectBusiness[]
+  taskLinks      TaskBusiness[]
+  assets         Asset[]          // primary business
+  assetLinks     AssetBusiness[]
+  accessGrants   AccessGrant[]
+  tags           BusinessTag[]
+  meetingLinks   MeetingBusiness[]
+  announcements  Announcement[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Many-to-many: a task can belong to multiple businesses.
+model TaskBusiness {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  @@unique([taskId, businessId])
+}
+
+// Many-to-many: a project can be linked to multiple businesses (e.g., shared initiatives).
+model ProjectBusiness {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  @@unique([projectId, businessId])
+}
+
+// Many-to-many: an asset can belong to multiple businesses.
+model AssetBusiness {
+  id         String   @id @default(cuid())
+  assetId    String
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  @@unique([assetId, businessId])
+}
+
+// Seeded, admin-extensible reference table for asset categories.
+model AssetCategory {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  name       String
+  icon       String?
+  parentId   String?
+  parent     AssetCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children   AssetCategory[] @relation("CategoryTree")
+  sortOrder  Int      @default(0)
+  isSystem   Boolean  @default(false)
+  archivedAt DateTime?
+
+  assets     Asset[]
+}
+
+// Structured brand & resource hub per business.
+model Asset {
+  id             String    @id @default(cuid())
+  businessId     String    // primary business
+  business       Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessLinks  AssetBusiness[]           // extra businesses
+  categoryId     String
+  category       AssetCategory @relation(fields: [categoryId], references: [id])
+  projectId      String?   // optional link to a project
+  project        Project?  @relation(fields: [projectId], references: [id])
+  name           String
+  description    String?
+  kind           String    // "link" | "file"
+  url            String?   // for kind = link
+  filePath       String?   // stored filename under uploads/, for kind = file
+  fileName       String?
+  fileSize       Int?
+  mimeType       String?
+  version        Int       @default(1)
+  parentAssetId  String?   // chaining: generic versioning/variant relation
+  parentAsset    Asset?    @relation("AssetChain", fields: [parentAssetId], references: [id])
+  childAssets    Asset[]   @relation("AssetChain")
+  isPinned       Boolean   @default(false) // org-wide featured flag
+  customFields   String?   // JSON [{key, value}]
+  addedById      String
+  addedBy        User      @relation(fields: [addedById], references: [id])
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tags           AssetTag[]
   taskLinks      TaskAsset[]
+  favoritedBy    Favorite[]
+  accessGrants   AccessGrant[]
+
+  @@index([businessId])
+  @@index([categoryId])
+  @@index([createdAt])
 }
 
-// Who has access to which client property (ad account, page, domain, repo).
-// Stores who-has-what, never passwords.
-model AccessGrant {
-  id        String    @id @default(cuid())
-  clientId  String
-  client    Client    @relation(fields: [clientId], references: [id])
-  userId    String
-  user      User      @relation(fields: [userId], references: [id])
-  property  String // e.g. "Meta Ads account", "GitHub repo"
-  notes     String?
-  grantedAt DateTime  @default(now())
-  revokedAt DateTime?
+// Shared vocabulary: tags for assets, tasks, and businesses.
+model Tag {
+  id    String @id @default(cuid())
+  name  String @unique
+  color String?
+  assets     AssetTag[]
+  tasks      TaskTag[]
+  businesses BusinessTag[]
 }
 
-model Deal {
-  id                 String    @id @default(cuid())
-  clientId           String? // null for prospects (service deals not yet won)
-  client             Client?   @relation(fields: [clientId], references: [id])
-  kind               String // "service" | "brand"
-  name               String
-  prospectName       String? // company name before a Client record exists
-  contactName        String?
-  contactEmail       String?
-  stage              String // service: lead|qualified|proposal|negotiation|won|lost ; brand: outreach|in_talks|terms|signed|deliverables|completed|paid
-  value           Int       @default(0)
-  ownerId            String
-  owner              User      @relation(fields: [ownerId], references: [id])
-  notes              String?
-  lastActivityAt     DateTime  @default(now())
-  convertedProjectId String?
-  archivedAt         DateTime?
-  createdAt          DateTime  @default(now())
+model AssetTag {
+  id      String @id @default(cuid())
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  tagId   String
+  tag     Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@unique([assetId, tagId])
+}
+
+model TaskTag {
+  id     String @id @default(cuid())
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tagId  String
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@unique([taskId, tagId])
+}
+
+model BusinessTag {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  tagId      String
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@unique([businessId, tagId])
+}
+
+// Shared-team structure: departments and skills.
+model Department {
+  id         String   @id @default(cuid())
+  name       String
+  slug       String   @unique
+  sortOrder  Int      @default(0)
+  archivedAt DateTime?
+  users      User[]
+}
+
+model Skill {
+  id    String @id @default(cuid())
+  name  String @unique
+  users UserSkill[]
+}
+
+model UserSkill {
+  id      String  @id @default(cuid())
+  userId  String
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skillId String
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  level   String? // "beginner" | "intermediate" | "expert"
+  @@unique([userId, skillId])
+}
+
+// Workstream: business-scoped kanban service line (was Vertical, company-scoped).
+model Workstream {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name       String
+  slug       String
+  isSystem   Boolean  @default(false) // Change Requests-style protection
+  sortOrder  Int      @default(0)
+  archivedAt DateTime?
+  stages     PipelineStage[]
+  projects   ProjectWorkstream[]
+  tasks      Task[]
+  @@unique([businessId, slug])
+}
+
+// Kanban column within a workstream.
+model PipelineStage {
+  id          String    @id @default(cuid())
+  workstreamId String
+  workstream  Workstream @relation(fields: [workstreamId], references: [id], onDelete: Cascade)
+  name        String
+  sortOrder   Int
+  isTerminal  Boolean   @default(false)
+  archivedAt  DateTime?
+  tasks       Task[]
+}
+
+// Attaches a Workstream to a Project -> its own kanban board.
+model ProjectWorkstream {
+  id          String     @id @default(cuid())
+  projectId   String
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workstreamId String
+  workstream  Workstream @relation(fields: [workstreamId], references: [id], onDelete: Cascade)
+  @@unique([projectId, workstreamId])
 }
 
 model ProjectTemplate {
@@ -132,147 +247,127 @@ model ProjectTemplate {
   key         String    @unique
   name        String
   description String?
-  config      String // JSON: { verticals: [slug], milestones: [{title, offsetDays, billable}], tasks: [{title, vertical, offsetDays, estimateHours, priority}] }
+  config      String    // JSON: { workstreams: [slug], milestones: [{title, offsetDays}], tasks: [{title, workstream, offsetDays, estimateHours, priority}] }
   archivedAt  DateTime?
   projects    Project[]
 }
 
 model Project {
-  id         String           @id @default(cuid())
-  clientId   String
-  client     Client           @relation(fields: [clientId], references: [id])
-  name       String
-  templateId String?
-  template   ProjectTemplate? @relation(fields: [templateId], references: [id])
-  value   Int              @default(0)
-  ownerId    String // the PM
-  owner      User             @relation(fields: [ownerId], references: [id])
-  status     String           @default("active") // "active" | "completed" | "archived"
-  startDate  DateTime         @default(now())
-  endDate    DateTime?
-  notes      String?
-  archivedAt DateTime?
-  createdAt  DateTime         @default(now())
-  verticals  ProjectVertical[]
-  milestones Milestone[]
-  tasks      Task[]
-  assets     Asset[]
-  invoices   Invoice[]
-  members    ProjectMember[]
-}
+  id            String           @id @default(cuid())
+  businessId    String           // primary business (required)
+  business      Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessLinks ProjectBusiness[]           // extra businesses for cross-business initiatives
+  name          String
+  templateId    String?
+  template      ProjectTemplate? @relation(fields: [templateId], references: [id])
+  ownerId       String           // the PM
+  owner         User             @relation(fields: [ownerId], references: [id])
+  status        String           @default("active") // "active" | "completed" | "archived"
+  startDate     DateTime         @default(now())
+  endDate       DateTime?
+  notes         String?
+  archivedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
-// Attaches a Vertical (service line) to a Project -> its own kanban board.
-model ProjectVertical {
-  id         String   @id @default(cuid())
-  projectId  String
-  project    Project  @relation(fields: [projectId], references: [id])
-  verticalId String
-  vertical   Vertical @relation(fields: [verticalId], references: [id])
+  workstreams   ProjectWorkstream[]
+  milestones    Milestone[]
+  tasks         Task[]
+  assets        Asset[]
+  members       ProjectMember[]
 
-  @@unique([projectId, verticalId])
+  @@index([businessId])
+  @@index([status])
 }
 
 model ProjectMember {
   id        String  @id @default(cuid())
   projectId String
-  project   Project @relation(fields: [projectId], references: [id])
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userId    String
-  user      User    @relation(fields: [userId], references: [id])
-
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([projectId, userId])
 }
 
 model Milestone {
-  id          String    @id @default(cuid())
-  projectId   String
-  project     Project   @relation(fields: [projectId], references: [id])
-  title       String
-  dueDate     DateTime // mandatory, like everything else
-  billable    Boolean   @default(false)
-  amount   Int       @default(0)
-  status      String    @default("pending") // "pending" | "completed"
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title      String
+  dueDate    DateTime // mandatory, like everything else
+  status     String   @default("pending") // "pending" | "completed"
   completedAt DateTime?
-  archivedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  invoices    Invoice[]
-}
-
-// Company-level vertical (service line) with its ordered pipeline.
-model Vertical {
-  id         String            @id @default(cuid())
-  companyId  String
-  company    Company           @relation(fields: [companyId], references: [id])
-  name       String
-  slug       String            @unique
-  isSystem   Boolean           @default(false) // Change Requests vertical is protected
-  sortOrder  Int               @default(0)
   archivedAt DateTime?
-  stages     PipelineStage[]
-  projects   ProjectVertical[]
-  tasks      Task[]
-  assets     Asset[]
+  createdAt  DateTime @default(now())
+
+  @@index([projectId, dueDate])
 }
 
-model PipelineStage {
-  id         String    @id @default(cuid())
-  verticalId String
-  vertical   Vertical  @relation(fields: [verticalId], references: [id])
-  name       String
-  sortOrder  Int
-  isTerminal Boolean   @default(false) // reaching this stage completes the task
-  archivedAt DateTime?
-  tasks      Task[]
-}
-
+// Core task model.
 model Task {
-  id              String    @id @default(cuid())
-  projectId       String
-  project         Project   @relation(fields: [projectId], references: [id])
-  verticalId      String
-  vertical        Vertical  @relation(fields: [verticalId], references: [id])
-  stageId         String
-  stage           PipelineStage @relation(fields: [stageId], references: [id])
-  title           String
-  description     String?
-  assigneeId      String // exactly one assignee — NOT NULL by design
-  assignee        User      @relation("assignedTasks", fields: [assigneeId], references: [id])
-  creatorId       String
-  creator         User      @relation("createdTasks", fields: [creatorId], references: [id])
-  dueDate         DateTime // NOT NULL — the system's core invariant
-  originalDueDate DateTime // first deadline ever set; displayed forever
-  priority        String    @default("medium") // "low" | "medium" | "high" | "urgent"
-  estimateHours   Float     @default(0)
-  tags            String?
-  // Tickets are tasks in the Change Requests vertical:
-  isTicket        Boolean   @default(false)
-  ticketType      String? // "change" | "bug" | "revision"
-  raisedById      String?
-  raisedBy        User?     @relation("raisedTickets", fields: [raisedById], references: [id])
+  id                String   @id @default(cuid())
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workstreamId      String
+  workstream        Workstream @relation(fields: [workstreamId], references: [id], onDelete: Cascade)
+  stageId           String
+  stage             PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  businessLinks     TaskBusiness[]  // one-or-more businesses
+  title             String
+  description       String?
+  assigneeId        String  // exactly one assignee — NOT NULL by design
+  assignee          User    @relation("assignedTasks", fields: [assigneeId], references: [id])
+  creatorId         String
+  creator           User    @relation("createdTasks", fields: [creatorId], references: [id])
+  dueDate           DateTime // NOT NULL — the system's core invariant
+  originalDueDate   DateTime // first deadline ever set; displayed forever
+  priority          String  @default("medium") // "low" | "medium" | "high" | "urgent"
+  estimateHours     Float   @default(0)
+  // Tickets are tasks in the Change Requests workstream:
+  isTicket          Boolean @default(false)
+  ticketType        String? // "change" | "bug" | "revision"
+  raisedById        String?
+  raisedBy          User?   @relation("raisedTickets", fields: [raisedById], references: [id])
   // Variations link to their master:
-  masterTaskId    String?
-  masterTask      Task?     @relation("variations", fields: [masterTaskId], references: [id])
-  variations      Task[]    @relation("variations")
+  masterTaskId      String?
+  masterTask        Task?   @relation("variations", fields: [masterTaskId], references: [id])
+  variations        Task[]  @relation("variations")
   // Escalation state (managed by the engine, idempotent per rung):
-  escalationLevel Int       @default(0) // 0 none, 1 reminded, 2 overdue, 3 CEO, 4 review+locked
-  overdueSince    DateTime?
-  deadlineLocked  Boolean   @default(false)
-  completedAt     DateTime?
-  archivedAt      DateTime?
-  createdAt       DateTime  @default(now())
-  subtasks        Subtask[]
-  assetLinks      TaskAsset[]
-  watchers        TaskWatcher[]
+  escalationLevel   Int     @default(0) // 0 none, 1 reminded, 2 overdue, 3 owner, 4 review+locked
+  overdueSince      DateTime?
+  deadlineLocked    Boolean @default(false)
+  completedAt       DateTime?
+  archivedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  subtasks          Subtask[]
+  assetLinks        TaskAsset[]
+  watchers          TaskWatcher[]
   extensionRequests ExtensionRequest[]
+  tags              TaskTag[]
+  dependsOn         TaskDependency[] @relation("dependent")
+  blocks            TaskDependency[] @relation("dependency")
 
   @@index([assigneeId, completedAt])
-  @@index([projectId, verticalId])
+  @@index([projectId, workstreamId])
   @@index([dueDate])
+}
+
+// Task dependencies: simple "blocks/blocked by" relations.
+model TaskDependency {
+  id          String @id @default(cuid())
+  taskId      String
+  task        Task   @relation("dependent", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnId String
+  dependsOn   Task   @relation("dependency", fields: [dependsOnId], references: [id], onDelete: Cascade)
+  @@unique([taskId, dependsOnId])
 }
 
 model Subtask {
   id        String   @id @default(cuid())
   taskId    String
-  task      Task     @relation(fields: [taskId], references: [id])
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   title     String
   done      Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -281,28 +376,26 @@ model Subtask {
 model TaskAsset {
   id        String @id @default(cuid())
   taskId    String
-  task      Task   @relation(fields: [taskId], references: [id])
+  task      Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
   assetId   String
-  asset     Asset  @relation(fields: [assetId], references: [id])
+  asset     Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
   direction String // "input" | "output"
-
   @@unique([taskId, assetId, direction])
 }
 
 model TaskWatcher {
   id     String @id @default(cuid())
   taskId String
-  task   Task   @relation(fields: [taskId], references: [id])
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
   userId String
-  user   User   @relation(fields: [userId], references: [id])
-
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([taskId, userId])
 }
 
 model ExtensionRequest {
   id            String    @id @default(cuid())
   taskId        String
-  task          Task      @relation(fields: [taskId], references: [id])
+  task          Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
   requestedById String
   requestedBy   User      @relation("extensionRequests", fields: [requestedById], references: [id])
   requestedDate DateTime
@@ -315,41 +408,33 @@ model ExtensionRequest {
   createdAt     DateTime  @default(now())
 }
 
-model Invoice {
-  id          String     @id @default(cuid())
-  number      String     @unique
-  clientId    String
-  client      Client     @relation(fields: [clientId], references: [id])
-  projectId   String?
-  project     Project?   @relation(fields: [projectId], references: [id])
-  milestoneId String?
-  milestone   Milestone? @relation(fields: [milestoneId], references: [id])
-  status      String     @default("draft") // "draft" | "sent" | "partial" | "paid" | "overdue"
-  fileName    String? // original name of the CA-issued invoice file
-  filePath    String? // stored name under uploads/, served via /api/files/[name]
-  lineItems   String // JSON [{description, amount}]
-  subtotal Int
-  taxPercent  Float      @default(18)
-  total    Int
-  issueDate   DateTime   @default(now())
-  dueDate     DateTime
-  notes       String?
-  isInternal  Boolean    @default(false) // cost-tracking invoice for internal clients
-  archivedAt  DateTime?
-  createdAt   DateTime   @default(now())
-  payments    Payment[]
-}
-
-model Payment {
+// Per-user asset bookmarks.
+model Favorite {
   id        String   @id @default(cuid())
-  invoiceId String
-  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
-  amount Int
-  paidAt    DateTime @default(now())
-  method    String?
-  reference String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetId   String
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@unique([userId, assetId])
 }
 
+// Access vault: who has access to which business resource.
+model AccessGrant {
+  id         String    @id @default(cuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  assetId    String?   // optional: link to a specific asset
+  asset      Asset?    @relation(fields: [assetId], references: [id])
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property   String    // e.g. "Meta Ads account", "GitHub repo"
+  notes      String?
+  grantedAt  DateTime  @default(now())
+  revokedAt  DateTime?
+}
+
+// Shared User model across all businesses.
 model User {
   id                 String   @id @default(cuid())
   name               String
@@ -359,15 +444,22 @@ model User {
   phone              String?
   capacityHours      Float    @default(40) // weekly capacity
   avatarColor        String   @default("#3d64f1")
+  departmentId       String?
+  department         Department? @relation(fields: [departmentId], references: [id])
+  responsibilities   String?
+  availabilityStatus String   @default("available") // "available" | "reduced" | "on_leave"
+  awayUntil          DateTime?
   archivedAt         DateTime?
   createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
   roleAssignments    RoleAssignment[]
   sessions           Session[]
   assignedTasks      Task[]   @relation("assignedTasks")
   createdTasks       Task[]   @relation("createdTasks")
   raisedTickets      Task[]   @relation("raisedTickets")
   ownedProjects      Project[]
-  ownedDeals         Deal[]
+  skills             UserSkill[]
   registeredAssets   Asset[]
   accessGrants       AccessGrant[]
   watching           TaskWatcher[]
@@ -376,41 +468,26 @@ model User {
   comments           Comment[]
   notifications      Notification[]
   projectMemberships ProjectMember[]
-  resourceLinks      ResourceLink[]
+  favorites          Favorite[]
+  announcements      Announcement[]
+  meetings           Meeting[]
 }
 
-// The Links hub: one place for every link the team lives in — Drive folders,
-// Notion docs, brand dashboards, tools. Company-wide; optionally pinned to a
-// client.
-model ResourceLink {
-  id         String    @id @default(cuid())
-  title      String
-  url        String
-  category   String    @default("General") // e.g. "Drive", "Docs", "Tools", "Dashboards"
-  notes      String?
-  clientId   String?
-  addedById  String
-  addedBy    User      @relation(fields: [addedById], references: [id])
-  archivedAt DateTime?
-  createdAt  DateTime  @default(now())
-}
-
-// Role per scope: a person can be Member on one division and Lead on another.
+// Role per scope: a person can be Member on one business and Lead on another.
 model RoleAssignment {
   id        String @id @default(cuid())
   userId    String
-  user      User   @relation(fields: [userId], references: [id])
-  role      String // "ceo" | "lead" | "member" | "sales" | "finance"
-  scopeType String // "company" | "division" | "client" | "project"
-  scopeId   String
-
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String // "owner" | "lead" | "member"
+  scopeType String // "organization" | "business" | "project"
+  scopeId   String // "org" literal for organization scope; business/project UUID otherwise
   @@unique([userId, role, scopeType, scopeId])
 }
 
 model Session {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
@@ -419,59 +496,99 @@ model Session {
 // "When [deadline event] then [action]" — configurable per scope.
 model EscalationRule {
   id          String  @id @default(cuid())
-  scopeType   String // "company" | "division" | "client" | "project"
+  scopeType   String // "organization" | "business" | "project"
   scopeId     String
-  offsetHours Int // relative to due date: -24 = 24h before, 0 = on cross, 24, 48...
-  action      String // "remind_assignee" | "mark_overdue_notify_pm" | "escalate_ceo" | "schedule_review_lock"
-  level       Int // rung on the ladder, drives idempotency
+  offsetHours Int    // relative to due date: -24 = 24h before, 0 = on cross, 24, 48...
+  action      String // "remind_assignee" | "mark_overdue_notify_pm" | "escalate_owner" | "schedule_review_lock"
+  level       Int    // rung on the ladder, drives idempotency
   enabled     Boolean @default(true)
 }
 
 // Append-only. No update/delete code path exists anywhere in the app.
 model ActivityLog {
   id         String   @id @default(cuid())
-  actorId    String? // null => SYSTEM
-  actorName  String // denormalized so the log stays readable forever
-  entityType String // "task" | "project" | "deal" | "invoice" | "milestone" | "client" | "asset" | "extension_request" | ...
+  actorId    String?  // null => SYSTEM
+  actorName  String   // denormalized so the log stays readable forever
+  entityType String   // "task" | "project" | "meeting" | "milestone" | "business" | "asset" | "extension_request" | ...
   entityId   String
-  action     String // "created" | "stage_moved" | "deadline_changed" | "assigned" | "commented" | "escalation.*" | ...
+  action     String   // "created" | "stage_moved" | "deadline_changed" | "assigned" | "commented" | "escalation.*" | ...
   fromValue  String?
   toValue    String?
-  meta       String? // JSON
-  projectId  String? // denormalized filters for sheets/analytics
-  clientId   String?
+  meta       String?  // JSON
+  projectId  String?  // denormalized filters for sheets/analytics
+  businessId String?
   taskId     String?
   createdAt  DateTime @default(now())
 
   @@index([entityType, entityId])
   @@index([projectId])
+  @@index([businessId])
   @@index([taskId])
   @@index([createdAt])
 }
 
 model Comment {
   id         String   @id @default(cuid())
-  entityType String // "task" | "deal" | "project"
+  entityType String   // "task" | "project" | "meeting"
   entityId   String
   authorId   String
-  author     User     @relation(fields: [authorId], references: [id])
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   body       String
   createdAt  DateTime @default(now())
-
   @@index([entityType, entityId])
 }
 
 model Notification {
   id        String    @id @default(cuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id])
-  type      String // "reminder" | "overdue" | "escalation" | "assignment" | "extension" | "digest" | "invoice" | "deal"
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String    // "reminder" | "overdue" | "escalation" | "assignment" | "extension" | "digest" | "announcement" | "meeting"
   title     String
   body      String?
   link      String?
   channel   String    @default("in_app") // "in_app" | "email" | "whatsapp" (email/whatsapp are logged stubs in v1)
   readAt    DateTime?
   createdAt DateTime  @default(now())
-
   @@index([userId, readAt])
+}
+
+// Announcements: pinned updates for the team.
+model Announcement {
+  id         String    @id @default(cuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  title      String
+  body       String
+  authorId   String
+  author     User      @relation(fields: [authorId], references: [id])
+  pinned     Boolean   @default(false)
+  publishedAt DateTime @default(now())
+  expiresAt  DateTime?
+  archivedAt DateTime?
+  @@index([businessId, publishedAt])
+}
+
+// Meetings: schedulable events linked to one or more businesses.
+model Meeting {
+  id          String   @id @default(cuid())
+  title       String
+  notes       String?
+  startsAt    DateTime
+  endsAt      DateTime?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  archivedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  businessLinks MeetingBusiness[]
+  @@index([startsAt])
+}
+
+model MeetingBusiness {
+  id         String   @id @default(cuid())
+  meetingId  String
+  meeting    Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  @@unique([meetingId, businessId])
 }
