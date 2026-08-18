@@ -36,16 +36,16 @@ export const PATCH = withUser(async (req, user, params) => {
   if (input.tags !== undefined) fields.tags = input.tags.trim() || null;
 
   if (input.archive) {
-    const task = await db.task.findUnique({ where: { id: params.id }, include: { project: true } });
+    const task = await db.task.findUnique({ where: { id: params.id }, include: { campaign: true } });
     if (!task) throw new ValidationError("Task not found.");
-    if (!(await canManageProject(user, task.projectId))) {
+    if (!(await canManageProject(user, task.campaignId))) {
       throw new ForbiddenError("Only the PM or CEO can archive tasks.");
     }
     fields.archivedAt = new Date();
   }
 
   if (Object.keys(fields).length) {
-    const before = await db.task.findUnique({ where: { id: params.id }, include: { project: true } });
+    const before = await db.task.findUnique({ where: { id: params.id }, include: { campaign: true } });
     if (!before) throw new ValidationError("Task not found.");
     await db.task.update({ where: { id: params.id }, data: fields });
     await logActivity({
@@ -55,8 +55,8 @@ export const PATCH = withUser(async (req, user, params) => {
       entityId: params.id,
       action: input.archive ? "archived" : "updated",
       meta: { fields: Object.keys(fields) },
-      projectId: before.projectId,
-      clientId: before.project.clientId,
+      campaignId: before.campaignId,
+      businessId: before.campaign.businessId,
       taskId: params.id,
     });
   }

@@ -1,4 +1,5 @@
 // Aikyaa: Operating system for a parent organization managing multiple independent businesses.
+// Every piece of work is organized as a Campaign within a Business.
 // SQLite for dev; Postgres-compatible — switch datasource provider + DATABASE_URL for production.
 // Enum-like fields are strings with app-level constants (src/lib/constants.ts).
 //
@@ -41,8 +42,8 @@ model Business {
   updatedAt      DateTime @updatedAt
 
   workstreams    Workstream[]
-  projects       Project[]        // primary business
-  projectLinks   ProjectBusiness[]
+  campaigns      Campaign[]        // primary business
+  campaignLinks  CampaignBusiness[]
   taskLinks      TaskBusiness[]
   assets         Asset[]          // primary business
   assetLinks     AssetBusiness[]
@@ -65,14 +66,14 @@ model TaskBusiness {
   @@unique([taskId, businessId])
 }
 
-// Many-to-many: a project can be linked to multiple businesses (e.g., shared initiatives).
-model ProjectBusiness {
+// Many-to-many: a campaign can be linked to multiple businesses (e.g., shared initiatives).
+model CampaignBusiness {
   id         String   @id @default(cuid())
-  projectId  String
-  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  @@unique([projectId, businessId])
+  @@unique([campaignId, businessId])
 }
 
 // Many-to-many: an asset can belong to multiple businesses.
@@ -109,8 +110,8 @@ model Asset {
   businessLinks  AssetBusiness[]           // extra businesses
   categoryId     String
   category       AssetCategory @relation(fields: [categoryId], references: [id])
-  projectId      String?   // optional link to a project
-  project        Project?  @relation(fields: [projectId], references: [id])
+  campaignId     String?   // optional link to a campaign
+  campaign       Campaign? @relation(fields: [campaignId], references: [id])
   name           String
   description    String?
   kind           String    // "link" | "file"
@@ -215,7 +216,7 @@ model Workstream {
   sortOrder  Int      @default(0)
   archivedAt DateTime?
   stages     PipelineStage[]
-  projects   ProjectWorkstream[]
+  campaigns  CampaignWorkstream[]
   tasks      Task[]
   @@unique([businessId, slug])
 }
@@ -232,37 +233,44 @@ model PipelineStage {
   tasks       Task[]
 }
 
-// Attaches a Workstream to a Project -> its own kanban board.
-model ProjectWorkstream {
+// Attaches a Workstream to a Campaign -> its own kanban board.
+model CampaignWorkstream {
   id          String     @id @default(cuid())
-  projectId   String
-  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  campaignId  String
+  campaign    Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   workstreamId String
   workstream  Workstream @relation(fields: [workstreamId], references: [id], onDelete: Cascade)
-  @@unique([projectId, workstreamId])
+  @@unique([campaignId, workstreamId])
 }
 
-model ProjectTemplate {
+model CampaignTemplate {
   id          String    @id @default(cuid())
   key         String    @unique
   name        String
   description String?
   config      String    // JSON: { workstreams: [slug], milestones: [{title, offsetDays}], tasks: [{title, workstream, offsetDays, estimateHours, priority}] }
   archivedAt  DateTime?
-  projects    Project[]
+  campaigns   Campaign[]
 }
 
-model Project {
+// Campaign: the central unit of work organization.
+// Every piece of work is campaign-driven: marketing initiatives, product launches, content, events, GTM strategies, features, partnerships, etc.
+model Campaign {
   id            String           @id @default(cuid())
   businessId    String           // primary business (required)
   business      Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  businessLinks ProjectBusiness[]           // extra businesses for cross-business initiatives
+  businessLinks CampaignBusiness[]           // extra businesses for cross-business initiatives
   name          String
+  description   String?          // Rich text: campaign brief, execution plan, objectives
+  objective     String?          // What we're trying to achieve
+  goals         String?          // JSON or text: success metrics and KPIs
+  campaignType  String           @default("general") // "marketing" | "product" | "seo" | "content" | "event" | "website" | "internal" | "partnership" | "other"
   templateId    String?
-  template      ProjectTemplate? @relation(fields: [templateId], references: [id])
-  ownerId       String           // the PM
+  template      CampaignTemplate? @relation(fields: [templateId], references: [id])
+  ownerId       String           // the Campaign Owner
   owner         User             @relation(fields: [ownerId], references: [id])
-  status        String           @default("active") // "active" | "completed" | "archived"
+  status        String           @default("active") // "planning" | "active" | "paused" | "completed" | "archived"
+  priority      String           @default("medium") // "low" | "medium" | "high" | "critical"
   startDate     DateTime         @default(now())
   endDate       DateTime?
   notes         String?
@@ -270,29 +278,31 @@ model Project {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  workstreams   ProjectWorkstream[]
+  workstreams   CampaignWorkstream[]
   milestones    Milestone[]
   tasks         Task[]
   assets        Asset[]
-  members       ProjectMember[]
+  members       CampaignMember[]
 
   @@index([businessId])
   @@index([status])
+  @@index([campaignType])
+  @@index([priority])
 }
 
-model ProjectMember {
-  id        String  @id @default(cuid())
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@unique([projectId, userId])
+model CampaignMember {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([campaignId, userId])
 }
 
 model Milestone {
   id         String   @id @default(cuid())
-  projectId  String
-  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   title      String
   dueDate    DateTime // mandatory, like everything else
   status     String   @default("pending") // "pending" | "completed"
@@ -300,14 +310,14 @@ model Milestone {
   archivedAt DateTime?
   createdAt  DateTime @default(now())
 
-  @@index([projectId, dueDate])
+  @@index([campaignId, dueDate])
 }
 
 // Core task model.
 model Task {
   id                String   @id @default(cuid())
-  projectId         String
-  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  campaignId        String
+  campaign          Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   workstreamId      String
   workstream        Workstream @relation(fields: [workstreamId], references: [id], onDelete: Cascade)
   stageId           String
@@ -350,7 +360,7 @@ model Task {
   blocks            TaskDependency[] @relation("dependency")
 
   @@index([assigneeId, completedAt])
-  @@index([projectId, workstreamId])
+  @@index([campaignId, workstreamId])
   @@index([dueDate])
 }
 
@@ -404,7 +414,7 @@ model ExtensionRequest {
   decidedById   String?
   decidedBy     User?     @relation("extensionDecisions", fields: [decidedById], references: [id])
   decidedAt     DateTime?
-  decisionNote  String?
+  decisionNote   String?
   createdAt     DateTime  @default(now())
 }
 
@@ -458,7 +468,7 @@ model User {
   assignedTasks      Task[]   @relation("assignedTasks")
   createdTasks       Task[]   @relation("createdTasks")
   raisedTickets      Task[]   @relation("raisedTickets")
-  ownedProjects      Project[]
+  ownedCampaigns     Campaign[]
   skills             UserSkill[]
   registeredAssets   Asset[]
   accessGrants       AccessGrant[]
@@ -467,7 +477,7 @@ model User {
   extensionDecisions ExtensionRequest[] @relation("extensionDecisions")
   comments           Comment[]
   notifications      Notification[]
-  projectMemberships ProjectMember[]
+  campaignMemberships CampaignMember[]
   favorites          Favorite[]
   announcements      Announcement[]
   meetings           Meeting[]
@@ -479,8 +489,8 @@ model RoleAssignment {
   userId    String
   user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   role      String // "owner" | "lead" | "member"
-  scopeType String // "organization" | "business" | "project"
-  scopeId   String // "org" literal for organization scope; business/project UUID otherwise
+  scopeType String // "organization" | "business" | "campaign"
+  scopeId   String // "org" literal for organization scope; business/campaign UUID otherwise
   @@unique([userId, role, scopeType, scopeId])
 }
 
@@ -496,7 +506,7 @@ model Session {
 // "When [deadline event] then [action]" — configurable per scope.
 model EscalationRule {
   id          String  @id @default(cuid())
-  scopeType   String // "organization" | "business" | "project"
+  scopeType   String // "organization" | "business" | "campaign"
   scopeId     String
   offsetHours Int    // relative to due date: -24 = 24h before, 0 = on cross, 24, 48...
   action      String // "remind_assignee" | "mark_overdue_notify_pm" | "escalate_owner" | "schedule_review_lock"
@@ -509,19 +519,19 @@ model ActivityLog {
   id         String   @id @default(cuid())
   actorId    String?  // null => SYSTEM
   actorName  String   // denormalized so the log stays readable forever
-  entityType String   // "task" | "project" | "meeting" | "milestone" | "business" | "asset" | "extension_request" | ...
+  entityType String   // "task" | "campaign" | "meeting" | "milestone" | "business" | "asset" | "extension_request" | ...
   entityId   String
   action     String   // "created" | "stage_moved" | "deadline_changed" | "assigned" | "commented" | "escalation.*" | ...
   fromValue  String?
   toValue    String?
   meta       String?  // JSON
-  projectId  String?  // denormalized filters for sheets/analytics
+  campaignId String?  // denormalized filters for sheets/analytics
   businessId String?
   taskId     String?
   createdAt  DateTime @default(now())
 
   @@index([entityType, entityId])
-  @@index([projectId])
+  @@index([campaignId])
   @@index([businessId])
   @@index([taskId])
   @@index([createdAt])
@@ -529,7 +539,7 @@ model ActivityLog {
 
 model Comment {
   id         String   @id @default(cuid())
-  entityType String   // "task" | "project" | "meeting"
+  entityType String   // "task" | "campaign" | "meeting"
   entityId   String
   authorId   String
   author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)

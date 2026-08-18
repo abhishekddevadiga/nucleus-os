@@ -4,14 +4,14 @@ import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getWorkload } from "@/lib/workload";
 import { Avatar } from "@/components/ui";
-import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { ROLE_LABELS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
 export default async function PeoplePage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (!user.isCeo && !user.isLead) redirect("/my-work");
+  if (!user.isOwner && !user.isLead) redirect("/my-work");
 
   const [people, load] = await Promise.all([
     db.user.findMany({
@@ -31,7 +31,7 @@ export default async function PeoplePage() {
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {people.map((p) => {
           const l = load.find((x) => x.userId === p.id);
-          const roles = [...new Set(p.roleAssignments.map((r) => ROLE_LABELS[r.role as Role] ?? r.role))];
+          const roles = [...new Set(p.roleAssignments.map((r) => ROLE_LABELS[r.role as keyof typeof ROLE_LABELS] ?? r.role))];
           return (
             <Link key={p.id} href={`/people/${p.id}`} className="card block p-4 transition-transform hover:-translate-y-0.5">
               <div className="flex items-center gap-3">

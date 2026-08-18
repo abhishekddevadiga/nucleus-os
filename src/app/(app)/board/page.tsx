@@ -2,22 +2,19 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getVisibleProjectIds, taskProjectWhere } from "@/lib/permissions";
+import { getVisibleCampaignIds, taskProjectWhere } from "@/lib/permissions";
 import { computeBucket, BUCKET_COLUMNS, DUE_WINDOW_HOURS } from "@/lib/buckets";
 import BucketBoard, { type BucketCard } from "@/components/BucketBoard";
 import { relativeDue } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-// Global kanban: one board across every business, toggled by department
-// (vertical) on top, with derived status columns — Backlog / Pending / Due /
-// Completed / Client approved.
-export default async function BoardPage({ searchParams }: { searchParams: Promise<{ dept?: string }> }) {
+export default async function BoardPage({ searchParams }: { searchParams: Promise<{ ws?: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  const { dept } = await searchParams;
+  const { ws } = await searchParams;
 
-  const visible = await getVisibleProjectIds(user);
+  const visible = await getVisibleCampaignIds(user);
   const now = new Date();
   const completedCutoff = new Date(now.getTime() - 14 * 24 * 3600 * 1000);
 
@@ -30,21 +27,21 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
     include: {
       assignee: true,
       stage: true,
-      project: { include: { client: true } },
-      vertical: { include: { stages: { where: { archivedAt: null }, orderBy: { sortOrder: "asc" } } } },
+      campaign: { include: { business: true } },
+      workstream: { include: { stages: { where: { archivedAt: null }, orderBy: { sortOrder: "asc" } } } },
     },
     orderBy: { dueDate: "asc" },
   });
 
-  // Department chips: every vertical that has work in scope.
-  const departments = [...new Map(tasks.map((t) => [t.vertical.id, t.vertical])).values()].sort(
+  // Workstream chips: every workstream that has work in scope.
+  const workstreams = [...new Map(tasks.map((t) => [t.workstream.id, t.workstream])).values()].sort(
     (a, b) => a.sortOrder - b.sortOrder
   );
-  const active = departments.find((d) => d.slug === dept) ?? null;
-  const shown = active ? tasks.filter((t) => t.verticalId === active.id) : tasks;
+  const active = workstreams.find((w) => w.slug === ws) ?? null;
+  const shown = active ? tasks.filter((t) => t.workstreamId === active.id) : tasks;
 
   const cards: BucketCard[] = shown.map((t) => {
-    const stages = t.vertical.stages;
+    const stages = t.workstream.stages;
     const first = stages[0];
     const second = stages.length > 1 ? stages[1] : stages[0];
     const terminal = stages[stages.length - 1];
@@ -66,8 +63,8 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       overdue: !t.completedAt && due.tone === "overdue",
       isTicket: t.isTicket,
       isVariation: !!t.masterTaskId,
-      clientName: t.project.client.name,
-      verticalName: t.vertical.name,
+      clientName: t.campaign.business.name,
+      verticalName: t.workstream.name,
       stageName: t.stage.name,
       assignee: { name: t.assignee.name, avatarColor: t.assignee.avatarColor },
       targets: { backlog: first?.id, progress: second?.id, done: terminal?.id },
@@ -78,40 +75,18 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
     <div className="space-y-5">
       <header>
         <h1 className="text-2xl font-bold">Kanban</h1>
-        <p className="text-sm text-slate-500">
-          Every business, one board. Backlog = not started · Pending = in the pipeline · Due = overdue or due within{" "}
-          {DUE_WINDOW_HOURS}h · drag a card to move it.
-        </p>
+        <p className="text-sm text-slate-500">All tasks across all projects, organized by workstream.</p>
       </header>
-
-      {/* Department toggle */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        <span className="shrink-0 text-sm font-semibold text-slate-600">Departments</span>
-        <Link
-          href="/board"
-          className={`shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-            !active
-              ? "border-brand-500 bg-brand-50 text-brand-700"
-              : "border-slate-200 bg-canvas-raised text-slate-600 hover:border-slate-300"
-          }`}
-        >
-          All
-        </Link>
-        {departments.map((d) => (
-          <Link
-            key={d.id}
-            href={`/board?dept=${d.slug}`}
-            className={`shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-              active?.id === d.id
-                ? "border-brand-500 bg-brand-50 text-brand-700"
-                : "border-slate-200 bg-canvas-raised text-slate-600 hover:border-slate-300"
-            }`}
-          >
-            {d.name}
-          </Link>
-        ))}
-      </div>
-
+      {workstreams.length > 0 && (
+        <nav className="flex flex-wrap gap-1">
+          <Link href="/board" className={`tab ${!active ? "tab-active" : ""}`}>All Workstreams</Link>
+          {workstreams.map((w) => (
+            <Link key={w.id} href={`/board?ws=${w.slug}`} className={`tab ${active?.id === w.id ? "tab-active" : ""}`}>
+              {w.name}
+            </Link>
+          ))}
+        </nav>
+      )}
       <BucketBoard columns={BUCKET_COLUMNS} cards={cards} />
     </div>
   );

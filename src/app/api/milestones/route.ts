@@ -1,31 +1,36 @@
-import { withUser, ok, body } from "@/lib/api";
+import { NextResponse } from "next/server";
+import { body } from "@/lib/api";
+import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { logActivity } from "@/lib/activity";
-import { ValidationError, ForbiddenError } from "@/lib/tasks";
-import { canManageProject } from "@/lib/permissions";
+import { ok } from "@/lib/api";
 
-export const POST = withUser(async (req, user) => {
-  const input = await body<{ projectId: string; title: string; dueDate: string; billable?: boolean; amount?: number }>(req);
-  if (!input.title?.trim()) throw new ValidationError("Milestone title required.");
-  if (!input.dueDate) throw new ValidationError("Milestones cannot be saved without a due date.");
-  const project = await db.project.findFirst({ where: { id: input.projectId, archivedAt: null } });
-  if (!project) throw new ValidationError("Project not found.");
-  if (!(await canManageProject(user, project.id))) throw new ForbiddenError("Only the PM or CEO can add milestones.");
+export async function POST(req: Request) {
+  const user = await requireUser();
+  const input = await body<{ campaignId: string; title: string; dueDate: string }>(req);
+
+  const project = await db.campaign.findUnique({ where: { id: input.campaignId } });
+  if (!project) throw new Error("Pcampaign not found.");
 
   const milestone = await db.milestone.create({
     data: {
-      projectId: input.projectId,
+      campaignId: input.campaignId,
       title: input.title.trim(),
       dueDate: new Date(input.dueDate),
-      billable: !!input.billable,
-      amount: Math.max(0, Math.round(Number(input.amount) || 0)),
     },
   });
-  await logActivity({
-    actorId: user.id, actorName: user.name,
-    entityType: "milestone", entityId: milestone.id,
-    action: "created", toValue: milestone.title,
-    projectId: project.id, clientId: project.clientId,
+  
+  await db.activityLog.create({
+    data: {
+      actorId: user.id,
+      actorName: user.name,
+      entityType: "milestone",
+      entityId: milestone.id,
+      action: "created",
+      toValue: milestone.title,
+      campaignId: project.id,
+      businessId: project.businessId,
+    },
   });
+  
   return ok({ id: milestone.id });
-});
+}

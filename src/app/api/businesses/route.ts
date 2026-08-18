@@ -1,65 +1,66 @@
-import { NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getSessionUser, requireUser } from "@/lib/auth";
 
 export async function POST(req: Request) {
+  const user = await getSessionUser();
+  if (!user) return new Response("Unauthorized", { status: 401 });
+  if (!user.isOwner) return new Response("Forbidden", { status: 403 });
+
+  const body = await req.json();
+  const {
+    name,
+    tagline,
+    industry,
+    status = "planned",
+    description,
+    website,
+    contactEmail,
+    contactPhone,
+  } = body;
+
+  if (!name) {
+    return new Response("Business name is required", { status: 400 });
+  }
+
+  // Generate slug from name
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  // Check if slug already exists
+  const existing = await db.business.findUnique({
+    where: { slug },
+  });
+
+  if (existing) {
+    return new Response("A business with this name already exists", {
+      status: 400,
+    });
+  }
+
   try {
-    const user = await requireUser();
-    if (!user.isOwner && !user.isLead) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-
-    const data = await req.json();
-    const { name, tagline, description, industry, website, contactEmail, contactPhone } = data;
-
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return NextResponse.json({ error: "Business name is required" }, { status: 400 });
-    }
-
-    // Generate a slug from the name
-    const slug = name
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .replace(/-+/g, "-");
-
-    // Check if slug already exists
-    const existing = await db.business.findUnique({ where: { slug } });
-    if (existing) {
-      return NextResponse.json({ error: "A business with this name already exists" }, { status: 400 });
-    }
-
     const business = await db.business.create({
       data: {
-        name: name.trim(),
+        name,
         slug,
-        tagline: tagline?.trim() || null,
-        description: description?.trim() || null,
-        industry: industry?.trim() || null,
-        website: website?.trim() || null,
-        contactEmail: contactEmail?.trim() || null,
-        contactPhone: contactPhone?.trim() || null,
-        status: "active",
+        tagline: tagline || null,
+        industry: industry || null,
+        status,
+        description: description || null,
+        website: website || null,
+        contactEmail: contactEmail || null,
+        contactPhone: contactPhone || null,
         sortOrder: 0,
       },
     });
 
-    // Log activity
-    await db.activityLog.create({
-      data: {
-        actorId: user.id,
-        actorName: user.name,
-        entityType: "business",
-        entityId: business.id,
-        action: "created",
-        businessId: business.id,
-      },
+    return new Response(JSON.stringify(business), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
     });
-
-    return NextResponse.json({ id: business.id, slug: business.slug });
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Failed to create business" }, { status: 500 });
+    console.error("Business creation error:", error);
+    return new Response("Failed to create business", { status: 500 });
   }
 }

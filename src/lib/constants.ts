@@ -37,12 +37,37 @@ export const BUSINESS_STATUS_LABELS = {
   sunset: "Sunset",
 } as const;
 
-// Task/Project status.
-export const PROJECT_STATUSES = ["active", "completed", "archived"] as const;
-export const PROJECT_STATUS_LABELS = {
+// Campaign status.
+export const CAMPAIGN_STATUSES = ["planning", "active", "paused", "completed", "archived"] as const;
+export const CAMPAIGN_STATUS_LABELS = {
+  planning: "Planning",
   active: "Active",
+  paused: "Paused",
   completed: "Completed",
   archived: "Archived",
+} as const;
+
+// Campaign types.
+export const CAMPAIGN_TYPES = ["marketing", "product", "seo", "content", "event", "website", "internal", "partnership", "other"] as const;
+export const CAMPAIGN_TYPE_LABELS = {
+  marketing: "Marketing",
+  product: "Product",
+  seo: "SEO",
+  content: "Content",
+  event: "Event",
+  website: "Website",
+  internal: "Internal",
+  partnership: "Partnership",
+  other: "Other",
+} as const;
+
+// Campaign priority.
+export const CAMPAIGN_PRIORITIES = ["low", "medium", "high", "critical"] as const;
+export const CAMPAIGN_PRIORITY_LABELS = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
 } as const;
 
 // Milestone status.
@@ -63,7 +88,7 @@ export const NOTIFICATION_TYPES = [
 // User availability states.
 export const AVAILABILITY_STATUSES = ["available", "reduced", "on_leave"] as const;
 
-// Task/Project statuses for filtering and display.
+// Task/Campaign statuses for filtering and display.
 export const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
 
 // ============================================================================
@@ -156,12 +181,12 @@ export const ESCALATION_ACTION_LABELS = {
 } as const;
 
 // ============================================================================
-// PROJECT TEMPLATES
+// CAMPAIGN TEMPLATES
 //
-// Blueprints for spinning up new projects quickly.
+// Blueprints for spinning up new campaigns quickly.
 // ============================================================================
 
-export interface ProjectTemplateConfig {
+export interface CampaignTemplateConfig {
   workstreams: string[]; // slugs of workstreams to attach
   milestones: Array<{
     title: string;
@@ -176,18 +201,18 @@ export interface ProjectTemplateConfig {
   }>;
 }
 
-export interface ProjectTemplateData {
+export interface CampaignTemplateData {
   key: string;
   name: string;
   description: string;
-  config: ProjectTemplateConfig;
+  config: CampaignTemplateConfig;
 }
 
-export const DEFAULT_TEMPLATES: ProjectTemplateData[] = [
+export const DEFAULT_TEMPLATES: CampaignTemplateData[] = [
   {
     key: "product-launch",
     name: "Product Launch",
-    description: "Strategy → Planning → Execution → Launch for a new product",
+    description: "Strategy → Planning → Execution → Launch campaign for a new product",
     config: {
       workstreams: ["strategy", "planning", "execution", "launch", "change-requests"],
       milestones: [
@@ -207,8 +232,8 @@ export const DEFAULT_TEMPLATES: ProjectTemplateData[] = [
   },
   {
     key: "feature-delivery",
-    name: "Feature Delivery",
-    description: "Plan, build, and ship a single product feature",
+    name: "Feature Delivery Campaign",
+    description: "Plan, build, and ship a single product feature campaign",
     config: {
       workstreams: ["planning", "execution", "change-requests"],
       milestones: [
@@ -225,9 +250,9 @@ export const DEFAULT_TEMPLATES: ProjectTemplateData[] = [
     },
   },
   {
-    key: "campaign",
+    key: "marketing-campaign",
     name: "Marketing Campaign",
-    description: "Plan, create, and launch a marketing campaign",
+    description: "Plan, create, and launch a comprehensive marketing campaign",
     config: {
       workstreams: ["strategy", "planning", "execution", "change-requests"],
       milestones: [
@@ -245,8 +270,8 @@ export const DEFAULT_TEMPLATES: ProjectTemplateData[] = [
   },
   {
     key: "sprint",
-    name: "Sprint",
-    description: "One-week sprint for cross-functional work",
+    name: "Sprint Campaign",
+    description: "One-week sprint campaign for cross-functional work",
     config: {
       workstreams: ["execution", "change-requests"],
       milestones: [

@@ -1,34 +1,34 @@
 import { withUser } from "@/lib/api";
 import { db } from "@/lib/db";
-import { getVisibleProjectIds, taskProjectWhere } from "@/lib/permissions";
+import { getVisibleCampaignIds, taskProjectWhere } from "@/lib/permissions";
 import { BRAND } from "@/lib/brand";
 
 // CSV export of the task sheet. Same filters as the Reports page:
-// ?userId= &projectId= &clientId= &from= &to=
+// ?userId= &campaignId= &businessId= &from= &to=
 export const GET = withUser(async (req, user) => {
   const url = new URL(req.url);
   const userId = url.searchParams.get("userId") || undefined;
-  const projectId = url.searchParams.get("projectId") || undefined;
-  const clientId = url.searchParams.get("clientId") || undefined;
+  const campaignId = url.searchParams.get("campaignId") || undefined;
+  const businessId = url.searchParams.get("businessId") || undefined;
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
 
-  const visible = await getVisibleProjectIds(user);
+  const visible = await getVisibleCampaignIds(user);
   const tasks = await db.task.findMany({
     where: {
       ...taskProjectWhere(visible),
       archivedAt: null,
       ...(userId ? { assigneeId: userId } : {}),
-      ...(projectId ? { projectId } : {}),
-      ...(clientId ? { project: { clientId } } : {}),
+      ...(campaignId ? { campaignId } : {}),
+      ...(businessId ? { campaign: { businessId } } : {}),
       ...(from || to
         ? { dueDate: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + "T23:59:59") } : {}) } }
         : {}),
     },
     include: {
       assignee: true,
-      project: { include: { client: { include: { division: true } } } },
-      vertical: true,
+      campaign: { include: { business: true } },
+      workstream: true,
       stage: true,
     },
     orderBy: { dueDate: "asc" },
@@ -48,7 +48,7 @@ export const GET = withUser(async (req, user) => {
   };
   const now = Date.now();
   const header = [
-    "Task", "Type", "Division", "Client", "Project", "Vertical", "Stage", "Assignee",
+    "Task", "Type", "Division", "Client", "Pcampaign", "Vertical", "Stage", "Assignee",
     "Priority", "Estimate (h)", "Due date", "Original due", "Status", "Days in stage", "Escalation level",
   ];
   const lines = [header.join(",")];
@@ -58,10 +58,10 @@ export const GET = withUser(async (req, user) => {
       [
         esc(t.title),
         t.isTicket ? `ticket (${t.ticketType})` : "task",
-        esc(t.project.client.division.name),
-        esc(t.project.client.name),
-        esc(t.project.name),
-        esc(t.vertical.name),
+        esc(""),
+        esc(t.campaign.business.name),
+        esc(t.campaign.name),
+        esc(t.workstream.name),
         esc(t.stage.name),
         esc(t.assignee.name),
         t.priority,

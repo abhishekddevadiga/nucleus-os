@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { ValidationError } from "@/lib/tasks";
 
-// Create or update a project template. Config is validated JSON with the
+// Create or update a campaign template. Config is validated JSON with the
 // TemplateConfig shape (verticals, milestones, tasks with relative deadlines).
 export const POST = withUser(async (req, user) => {
   requireCeo(user);
@@ -18,9 +18,9 @@ export const POST = withUser(async (req, user) => {
   if (!Array.isArray(parsed.verticals)) throw new ValidationError('Config needs a "verticals" array of slugs.');
 
   if (input.id) {
-    const existing = await db.projectTemplate.findUnique({ where: { id: input.id } });
+    const existing = await db.campaignTemplate.findUnique({ where: { id: input.id } });
     if (!existing) throw new ValidationError("Template not found.");
-    await db.projectTemplate.update({
+    await db.campaignTemplate.update({
       where: { id: input.id },
       data: { name: input.name.trim(), description: input.description?.trim() || null, config: input.config },
     });
@@ -31,8 +31,8 @@ export const POST = withUser(async (req, user) => {
   const key = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   let unique = key;
   let n = 1;
-  while (await db.projectTemplate.findUnique({ where: { key: unique } })) unique = `${key}-${++n}`;
-  const created = await db.projectTemplate.create({
+  while (await db.campaignTemplate.findUnique({ where: { key: unique } })) unique = `${key}-${++n}`;
+  const created = await db.campaignTemplate.create({
     data: { key: unique, name: input.name.trim(), description: input.description?.trim() || null, config: input.config },
   });
   await logActivity({ actorId: user.id, actorName: user.name, entityType: "template", entityId: created.id, action: "created", toValue: created.name });

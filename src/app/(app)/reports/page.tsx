@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getVisibleProjectIds, taskProjectWhere } from "@/lib/permissions";
+import { getVisibleCampaignIds, taskProjectWhere } from "@/lib/permissions";
 import { DueBadge, PriorityBadge, SectionTitle, Th, Td, EmptyState } from "@/components/ui";
 import { fmtDate, durationShort } from "@/lib/format";
 
@@ -13,18 +13,18 @@ export const dynamic = "force-dynamic";
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ userId?: string; projectId?: string; clientId?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ userId?: string; campaignId?: string; businessId?: string; from?: string; to?: string }>;
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (!user.isCeo && !user.isLead && !user.isFinance) redirect("/my-work");
+  if (!user.isOwner && !user.isLead) redirect("/my-work");
   const filters = await searchParams;
 
-  const visible = await getVisibleProjectIds(user);
-  const [people, projects, clients] = await Promise.all([
+  const visible = await getVisibleCampaignIds(user);
+  const [people, projects, businesses] = await Promise.all([
     db.user.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
-    db.project.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
-    db.client.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
+    db.campaign.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
+    db.business.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
   ]);
 
   const tasks = await db.task.findMany({
@@ -32,8 +32,8 @@ export default async function ReportsPage({
       ...taskProjectWhere(visible),
       archivedAt: null,
       ...(filters.userId ? { assigneeId: filters.userId } : {}),
-      ...(filters.projectId ? { projectId: filters.projectId } : {}),
-      ...(filters.clientId ? { project: { clientId: filters.clientId } } : {}),
+      ...(filters.campaignId ? { campaignId: filters.campaignId } : {}),
+      ...(filters.businessId ? { campaign: { businessId: filters.businessId } } : {}),
       ...(filters.from || filters.to
         ? {
             dueDate: {
@@ -43,22 +43,22 @@ export default async function ReportsPage({
           }
         : {}),
     },
-    include: { assignee: true, project: { include: { client: true } }, vertical: true, stage: true },
+    include: { assignee: true, campaign: { include: { business: true } }, workstream: true, stage: true },
     orderBy: { dueDate: "asc" },
     take: 500,
   });
 
-  // Stage-duration analytics per vertical from stage_moved log entries.
+  // Stage-duration analytics per workstream from stage_moved log entries.
   const moves = await db.activityLog.findMany({
-    where: { action: "stage_moved", ...(visible === "all" ? {} : { projectId: { in: visible } }) },
+    where: { action: "stage_moved", ...(visible === "all" ? {} : { campaignId: { in: visible } }) },
     orderBy: { createdAt: "asc" },
   });
   const enters = new Map<string, { stage: string; at: Date; verticalName?: string }>();
   const durations = new Map<string, { total: number; count: number }>(); // "vertical|stage" -> agg
-  const taskVertical = new Map(tasks.map((t) => [t.id, t.vertical.name]));
+  const taskVertical = new Map(tasks.map((t) => [t.id, t.workstream.name]));
   const allTaskVerticals = new Map<string, string>();
-  const verticalRows = await db.task.findMany({ where: { archivedAt: null }, select: { id: true, vertical: { select: { name: true } } } });
-  for (const r of verticalRows) allTaskVerticals.set(r.id, r.vertical.name);
+  const verticalRows = await db.task.findMany({ where: { archivedAt: null }, select: { id: true, workstream: { select: { name: true } } } });
+  for (const r of verticalRows) allTaskVerticals.set(r.id, r.workstream.name);
   for (const m of moves) {
     if (!m.taskId || !m.fromValue || !m.toValue) continue;
     const prev = enters.get(m.taskId);
@@ -90,7 +90,7 @@ export default async function ReportsPage({
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Task sheets & reports</h1>
-          <p className="text-sm text-slate-500">Auto-generated live from the activity log — per person, project, client, any range.</p>
+          <p className="text-sm text-slate-500">Auto-generated live from the activity log — per person, campaign, client, any range.</p>
         </div>
         <a href={`/api/reports/sheet?${csvParams}`} className="btn-primary">Export CSV</a>
       </header>
@@ -105,14 +105,14 @@ export default async function ReportsPage({
         </div>
         <div>
           <label className="label">Client</label>
-          <select name="clientId" className="input" defaultValue={filters.clientId ?? ""}>
+          <select name="businessId" className="input" defaultValue={filters.businessId ?? ""}>
             <option value="">All</option>
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {businesses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div>
           <label className="label">Project</label>
-          <select name="projectId" className="input" defaultValue={filters.projectId ?? ""}>
+          <select name="campaignId" className="input" defaultValue={filters.campaignId ?? ""}>
             <option value="">All</option>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
@@ -144,8 +144,8 @@ export default async function ReportsPage({
                 {tasks.map((t) => (
                   <tr key={t.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
                     <Td><Link href={`/tasks/${t.id}`} className="font-medium text-brand-700 hover:underline">{t.title}</Link></Td>
-                    <Td className="text-xs">{t.project.client.name} · {t.project.name}</Td>
-                    <Td className="text-xs">{t.vertical.name} → {t.stage.name}</Td>
+                    <Td className="text-xs">{t.campaign.business.name} · {t.campaign.name}</Td>
+                    <Td className="text-xs">{t.workstream.name} → {t.stage.name}</Td>
                     <Td>{t.assignee.name}</Td>
                     <Td><PriorityBadge priority={t.priority} /></Td>
                     <Td>{t.estimateHours || "—"}</Td>

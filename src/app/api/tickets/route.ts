@@ -3,7 +3,7 @@ import { raiseTicket } from "@/lib/tasks";
 
 export const POST = withUser(async (req, user) => {
   const input = await body<{
-    projectId: string;
+    campaignId: string;
     title: string;
     ticketType: string;
     priority?: string;

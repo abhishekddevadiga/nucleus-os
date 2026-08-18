@@ -140,10 +140,9 @@ export function TaskRow({
     dueDate: Date;
     completedAt: Date | null;
     stage: { name: string };
-    vertical: { name: string };
-    project: { id: string; name: string; client: { name: string } };
+    workstream?: { name: string } | null;
+    campaign: { id: string; name: string };
     assignee: { name: string; avatarColor: string };
-    escalationLevel: number;
   };
 }) {
   return (
@@ -158,10 +157,9 @@ export function TaskRow({
           {task.title}
         </p>
         <p className="mt-0.5 truncate text-[12px] text-slate-500">
-          {task.project.client.name} · {task.project.name} · {task.vertical.name} → {task.stage.name}
+          {task.campaign.name}{task.workstream && <> · {task.workstream.name}</> } → {task.stage.name}
         </p>
       </div>
-      {task.escalationLevel >= 3 && <span className="chip bg-rose-500/90 text-white">CEO</span>}
       <PriorityBadge priority={task.priority} />
       <DueBadge due={task.dueDate} completed={!!task.completedAt} />
     </Link>

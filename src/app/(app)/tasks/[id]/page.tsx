@@ -22,8 +22,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   const task = await db.task.findUnique({
     where: { id },
     include: {
-      project: { include: { client: true } },
-      vertical: { include: { stages: { where: { archivedAt: null }, orderBy: { sortOrder: "asc" } } } },
+      campaign: { include: { business: true } },
+      workstream: { include: { stages: { where: { archivedAt: null }, orderBy: { sortOrder: "asc" } } } },
       stage: true,
       assignee: true,
       creator: true,
@@ -37,13 +37,13 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
     },
   });
   if (!task) notFound();
-  if (!(await canSeeProject(user, task.projectId)) && task.assigneeId !== user.id) notFound();
+  if (!(await canSeeProject(user, task.campaignId)) && task.assigneeId !== user.id) notFound();
 
   const [comments, activity, load, isManager] = await Promise.all([
     db.comment.findMany({ where: { entityType: "task", entityId: id }, include: { author: true }, orderBy: { createdAt: "asc" } }),
     db.activityLog.findMany({ where: { taskId: id }, orderBy: { createdAt: "desc" } }),
     getWorkload(),
-    canManageProject(user, task.projectId),
+    canManageProject(user, task.campaignId),
   ]);
   const people = await db.user.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } });
   const now = new Date();
@@ -62,10 +62,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          <Link href={`/clients/${task.project.client.slug}`} className="hover:underline">{task.project.client.name}</Link>
+          <Link href={`/businesses/${task.campaign.business.slug}`} className="hover:underline">{task.campaign.business.name}</Link>
           {" / "}
-          <Link href={`/projects/${task.projectId}`} className="hover:underline">{task.project.name}</Link>
-          {" / "}{task.vertical.name}
+          <Link href={`/campaigns/${task.campaignId}`} className="hover:underline">{task.campaign.name}</Link>
+          {" / "}{task.workstream.name}
         </p>
         <h1 className="mt-1 text-2xl font-bold">
           {task.isTicket && <span className="mr-2 rounded bg-fuchsia-100 px-1.5 py-0.5 align-middle text-xs font-bold text-fuchsia-700">TICKET · {task.ticketType}</span>}
@@ -77,7 +77,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           <DueBadge due={task.dueDate} completed={!!task.completedAt} />
           {task.deadlineLocked && <span className="chip bg-rose-600 text-white">🔒 deadline locked</span>}
           <span className="chip bg-slate-100 text-slate-600">{task.estimateHours}h est</span>
-          {task.tags?.split(",").map((t) => <span key={t} className="chip bg-slate-50 text-slate-500">#{t.trim()}</span>)}
         </div>
       </header>
 
@@ -98,8 +97,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
 
       {/* Pipeline stage — progress reporting IS moving the stage */}
       <div className="card p-4">
-        <SectionTitle>Pipeline · {task.vertical.name}</SectionTitle>
-        <StageMover taskId={task.id} stages={task.vertical.stages} currentStageId={task.stageId} />
+        <SectionTitle>Pipeline · {task.workstream.name}</SectionTitle>
+        <StageMover taskId={task.id} stages={task.workstream.stages} currentStageId={task.stageId} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -133,7 +132,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           )}
           {!task.completedAt && (
             <div className="mt-3 space-y-3">
-              {isManager && <DeadlineChanger taskId={task.id} current={task.dueDate.toISOString()} locked={task.deadlineLocked && !user.isCeo} />}
+              {isManager && <DeadlineChanger taskId={task.id} current={task.dueDate.toISOString()} locked={task.deadlineLocked && !user.isOwner} />}
               {isAssignee && !isManager && (
                 <>
                   <p className="text-xs text-slate-400">You can&apos;t edit your own deadline — request an extension:</p>
@@ -230,8 +229,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             {task.assetLinks.map((l) => (
               <p key={l.id} className="text-sm">
                 <span className={`chip mr-2 ${l.direction === "input" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"}`}>{l.direction}</span>
-                <a href={l.asset.url} target="_blank" rel="noreferrer" className="font-medium text-brand-700 hover:underline">{l.asset.name} ↗</a>
-                <span className="text-xs text-slate-400"> · {l.asset.type}</span>
+                <a href={l.asset.url ?? "#"} target="_blank" rel="noreferrer" className="font-medium text-brand-700 hover:underline">{l.asset.name} ↗</a>
+                <span className="text-xs text-slate-400"> · {l.asset.kind}</span>
               </p>
             ))}
           </div>

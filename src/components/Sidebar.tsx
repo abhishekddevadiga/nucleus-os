@@ -14,7 +14,7 @@ export interface NavItem {
 function Wordmark() {
   return (
     <span className="flex items-center gap-2.5">
-      <img src="/logo.svg" alt="" className="h-[26px] w-[26px] rounded-lg object-contain" />
+      <img src="/aikyaa-logo-source.png" alt="" className="h-[40px] w-auto object-contain" />
       <span className="text-[15px] font-semibold tracking-tight text-slate-900">{BRAND.name}</span>
     </span>
   );

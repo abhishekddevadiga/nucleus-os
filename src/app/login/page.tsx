@@ -36,11 +36,11 @@ export default function LoginPage() {
       <div
         aria-hidden
         className="pointer-events-none absolute left-1/2 top-[-14%] h-[560px] w-[560px] -translate-x-1/2 rounded-full opacity-[0.18] blur-[130px]"
-        style={{ background: "radial-gradient(circle, #d4a574, transparent 70%)" }}
+        style={{ background: "radial-gradient(circle, #2d7c5a, transparent 70%)" }}
       />
       <div className="animate-page relative w-full max-w-[380px]">
         <div className="mb-9 flex flex-col items-center text-center">
-          <img src="/logo.svg" alt="" className="mb-5 h-14 w-14 rounded-2xl object-contain shadow-soft" />
+          <img src="/aikyaa-logo-source.png" alt="" className="mb-5 h-16 w-auto object-contain" />
           <h1 className="text-[26px] font-semibold tracking-tight text-slate-900">Get started</h1>
           <p className="mt-2 text-[14px] text-slate-500">Sign in to {BRAND.productName}</p>
         </div>

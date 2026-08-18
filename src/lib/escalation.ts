@@ -17,13 +17,13 @@ interface Rule {
   level: number;
 }
 
-async function resolveLadder(projectId: string, businessId: string): Promise<Rule[]> {
+async function resolveLadder(campaignId: string, businessId: string): Promise<Rule[]> {
   const rules = await db.escalationRule.findMany({ where: { enabled: true } });
   const byScope = (type: string, id: string) =>
     rules.filter((r) => r.scopeType === type && r.scopeId === id);
   const ladder =
     firstNonEmpty(
-      byScope("project", projectId),
+      byScope("campaign", campaignId),
       byScope("business", businessId),
       rules.filter((r) => r.scopeType === "organization")
     ) ?? [];
@@ -43,13 +43,13 @@ export async function runEscalationSweep(): Promise<{ fired: number; checked: nu
   const tasks = await db.task.findMany({
     where: { archivedAt: null, completedAt: null, escalationLevel: { lt: 4 } },
     include: {
-      project: { include: { business: true } },
+      campaign: { include: { business: true } },
       assignee: true,
     },
   });
 
   for (const task of tasks) {
-    const ladder = await resolveLadder(task.projectId, task.project.businessId);
+    const ladder = await resolveLadder(task.campaignId, task.campaign.businessId);
     for (const rule of ladder) {
       if (task.escalationLevel >= rule.level) continue;
       const triggerAt = new Date(task.dueDate.getTime() + rule.offsetHours * 3600 * 1000);
@@ -70,9 +70,9 @@ async function fireRule(
     title: string;
     isTicket: boolean;
     dueDate: Date;
-    projectId: string;
+    campaignId: string;
     assigneeId: string;
-    project: { businessId: string; name: string };
+    campaign: { businessId: string; name: string };
     assignee: { name: string };
   },
   rule: Rule,
@@ -82,8 +82,8 @@ async function fireRule(
   const base = {
     entityType,
     entityId: task.id,
-    projectId: task.projectId,
-    businessId: task.project.businessId,
+    campaignId: task.campaignId,
+    businessId: task.campaign.businessId,
     taskId: task.id,
   };
 
@@ -95,7 +95,7 @@ async function fireRule(
         userId: task.assigneeId,
         type: "reminder",
         title: `Due in <24h: ${task.title}`,
-        body: `Deadline ${task.dueDate.toLocaleString()} · ${task.project.name}`,
+        body: `Deadline ${task.dueDate.toLocaleString()} · ${task.campaign.name}`,
         link: `/tasks/${task.id}`,
         channels: ["in_app", "whatsapp", "email"],
       });
@@ -107,11 +107,11 @@ async function fireRule(
         data: { escalationLevel: rule.level, overdueSince: task.dueDate },
       });
       await logActivity({ ...base, action: "escalation.overdue", fromValue: task.dueDate.toISOString(), toValue: now.toISOString() });
-      const managers = await getProjectManagers(task.projectId);
+      const managers = await getProjectManagers(task.campaignId);
       await notifyMany(managers, {
         type: "overdue",
         title: `OVERDUE: ${task.title}`,
-        body: `${task.assignee.name} · was due ${task.dueDate.toLocaleString()} · ${task.project.name}`,
+        body: `${task.assignee.name} · was due ${task.dueDate.toLocaleString()} · ${task.campaign.name}`,
         link: `/tasks/${task.id}`,
       });
       break;
@@ -123,7 +123,7 @@ async function fireRule(
       await notifyMany(owners, {
         type: "escalation",
         title: `Escalated (24h overdue): ${task.title}`,
-        body: `${task.assignee.name} · ${task.project.name}`,
+        body: `${task.assignee.name} · ${task.campaign.name}`,
         link: `/tasks/${task.id}`,
         channels: ["in_app", "whatsapp", "email"],
       });
@@ -135,12 +135,12 @@ async function fireRule(
         data: { escalationLevel: rule.level, deadlineLocked: true },
       });
       await logActivity({ ...base, action: "escalation.review_scheduled", toValue: "deadline edits locked" });
-      const managers = await getProjectManagers(task.projectId);
+      const managers = await getProjectManagers(task.campaignId);
       const owners = await getOwnerUserIds();
       await notifyMany([...managers, ...owners, task.assigneeId], {
         type: "escalation",
         title: `Review scheduled (48h overdue): ${task.title}`,
-        body: `Silent deadline edits are now locked. ${task.assignee.name} · ${task.project.name}`,
+        body: `Silent deadline edits are now locked. ${task.assignee.name} · ${task.campaign.name}`,
         link: `/tasks/${task.id}`,
       });
       break;

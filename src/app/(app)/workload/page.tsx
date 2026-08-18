@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function WorkloadPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (!user.isCeo && !user.isLead) redirect("/my-work");
+  if (!user.isOwner && !user.isLead) redirect("/my-work");
 
   const load = await getWorkload();
   const bandCls = { green: "bg-emerald-500", amber: "bg-amber-500", red: "bg-rose-500" } as const;

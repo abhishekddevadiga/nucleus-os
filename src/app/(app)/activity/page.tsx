@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function ActivityPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (!user.isCeo) redirect("/my-work");
+  if (!user.isOwner) redirect("/my-work");
   const { page = "1" } = await searchParams;
   const pageNum = Math.max(1, parseInt(page) || 1);
   const perPage = 100;

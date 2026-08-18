@@ -4,7 +4,7 @@ import type { Config } from "tailwindcss";
 // DESIGN SYSTEM — light, clean, productive.
 //
 // A soft off-white canvas with pure-white cards, a calm neutral ramp, and a
-// single violet brand colour reserved for primary actions and active state.
+// single green brand colour reserved for primary actions and active state.
 // Semantic hues (rose / amber / emerald / sky …) appear only to signal status.
 //
 // To re-skin the whole app, change the `brand` ramp below and the `--brand`
@@ -35,18 +35,18 @@ const config: Config = {
           sunken: "#f1f3f7", // board columns, inset wells
         },
 
-        // Brand — violet. Balanced for white text at 500 and above.
+        // Brand — green. Balanced for white text at 500 and above.
         brand: {
-          50: "#f5f3ff",
-          100: "#ede9fe",
-          200: "#ddd6fe",
-          300: "#c4b5fd",
-          400: "#a78bfa",
-          500: "#7b68ee",
-          600: "#6d55e0",
-          700: "#5b45c4",
-          800: "#4a389f",
-          900: "#3d2f80",
+          50: "#f0fdf4",
+          100: "#dcfce7",
+          200: "#bbf7d0",
+          300: "#86efac",
+          400: "#4ade80",
+          500: "#2d7c5a",
+          600: "#259651",
+          700: "#1b7f43",
+          800: "#165e3b",
+          900: "#134e31",
         },
 
         // Neutral ramp (standard direction: 50 = lightest, 900 = darkest text).
@@ -82,7 +82,7 @@ const config: Config = {
       boxShadow: {
         soft: "0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.06)",
         lift: "0 12px 32px rgba(15,23,42,0.10), 0 2px 8px rgba(15,23,42,0.06)",
-        glow: "0 0 0 3px rgba(123,104,238,0.16)",
+        glow: "0 0 0 3px rgba(45,124,90,0.16)",
       },
       keyframes: {
         "fade-in": {

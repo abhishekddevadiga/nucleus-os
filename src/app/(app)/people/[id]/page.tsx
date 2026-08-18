@@ -3,7 +3,7 @@ import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Avatar, SectionTitle, TaskRow, EmptyState, Th, Td } from "@/components/ui";
 import { fmtDateTime } from "@/lib/format";
-import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { ROLE_LABELS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   const viewer = await getSessionUser();
   if (!viewer) redirect("/login");
   const { id } = await params;
-  if (!viewer.isCeo && !viewer.isLead && viewer.id !== id) redirect("/my-work");
+  if (!viewer.isOwner && !viewer.isLead && viewer.id !== id) redirect("/my-work");
 
   const person = await db.user.findUnique({
     where: { id },
@@ -25,19 +25,19 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   const [openTasks, recentDone, activity] = await Promise.all([
     db.task.findMany({
       where: { assigneeId: id, archivedAt: null, completedAt: null },
-      include: { stage: true, vertical: true, project: { include: { client: true } }, assignee: true },
+      include: { stage: true, workstream: true, campaign: { include: { business: true } }, assignee: true },
       orderBy: { dueDate: "asc" },
     }),
     db.task.findMany({
       where: { assigneeId: id, archivedAt: null, completedAt: { not: null } },
-      include: { stage: true, vertical: true, project: { include: { client: true } }, assignee: true },
+      include: { stage: true, workstream: true, campaign: { include: { business: true } }, assignee: true },
       orderBy: { completedAt: "desc" },
       take: 10,
     }),
     db.activityLog.findMany({ where: { actorId: id }, orderBy: { createdAt: "desc" }, take: 30 }),
   ]);
   const overdue = openTasks.filter((t) => t.dueDate < now);
-  const roles = [...new Set(person.roleAssignments.map((r) => ROLE_LABELS[r.role as Role] ?? r.role))];
+  const roles = [...new Set(person.roleAssignments.map((r) => ROLE_LABELS[r.role as keyof typeof ROLE_LABELS] ?? r.role))];
 
   return (
     <div className="space-y-8">
@@ -54,7 +54,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       {overdue.length > 0 && (
         <section>
           <SectionTitle><span className="text-rose-600">Overdue ({overdue.length})</span></SectionTitle>
-          <div className="card">{overdue.map((t) => <TaskRow key={t.id} task={t} />)}</div>
+          <div className="card">{overdue.map((t) => <TaskRow key={t.id} task={t as any} />)}</div>
         </section>
       )}
 
@@ -63,14 +63,14 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         {openTasks.length === 0 ? (
           <EmptyState title="No open tasks." />
         ) : (
-          <div className="card">{openTasks.filter((t) => t.dueDate >= now).map((t) => <TaskRow key={t.id} task={t} />)}</div>
+          <div className="card">{openTasks.filter((t) => t.dueDate >= now).map((t) => <TaskRow key={t.id} task={t as any} />)}</div>
         )}
       </section>
 
       {recentDone.length > 0 && (
         <section>
           <SectionTitle>Recently completed</SectionTitle>
-          <div className="card">{recentDone.map((t) => <TaskRow key={t.id} task={t} />)}</div>
+          <div className="card">{recentDone.map((t) => <TaskRow key={t.id} task={t as any} />)}</div>
         </section>
       )}
 

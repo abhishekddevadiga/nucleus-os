@@ -11,22 +11,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const unread = await db.notification.count({ where: { userId: user.id, readAt: null, channel: "in_app" } });
 
   const items: NavItem[] = [];
-  if (user.isCeo || user.isLead || user.isFinance) items.push({ href: "/", label: "Command Center", icon: "◎" });
+  if (user.isOwner || user.isLead) items.push({ href: "/", label: "Command Center", icon: "◎" });
   items.push({ href: "/my-work", label: "My Work", icon: "☑" });
   items.push({ href: "/board", label: "Kanban", icon: "▧" });
-  items.push({ href: "/projects", label: "Projects", icon: "▤" });
-  items.push({ href: "/clients", label: "Businesses", icon: "▦" });
+  items.push({ href: "/campaigns", label: "Campaigns", icon: "▤" });
+  items.push({ href: "/businesses", label: "Businesses", icon: "▦" });
   items.push({ href: "/team", label: "Team", icon: "◈" });
-  if (user.isCeo || user.isLead) {
+  if (user.isOwner || user.isLead) {
     const pending = pendingApprovalCount();
     items.push({ href: "/approvals", label: pending > 0 ? `Approvals (${pending})` : "Approvals", icon: "✓" });
   }
-  if (user.isCeo || user.isLead) items.push({ href: "/workload", label: "Workload", icon: "▥" });
-  if (user.isCeo || user.isFinance) items.push({ href: "/invoices", label: "Money", icon: "$" });
-  if (user.isCeo || user.isLead || user.isFinance) items.push({ href: "/reports", label: "Reports", icon: "≡" });
-  if (user.isCeo || user.isLead) items.push({ href: "/people", label: "People", icon: "◉" });
-  if (user.isCeo) items.push({ href: "/activity", label: "Activity Log", icon: "⧗" });
-  if (user.isCeo) items.push({ href: "/admin", label: "Admin", icon: "⚙" });
+  if (user.isOwner || user.isLead) items.push({ href: "/workload", label: "Workload", icon: "▥" });
+  items.push({ href: "/assets", label: "Assets Hub", icon: "📦" });
+  if (user.isOwner || user.isLead) items.push({ href: "/reports", label: "Reports", icon: "≡" });
+  if (user.isOwner || user.isLead) items.push({ href: "/people", label: "People", icon: "◉" });
+  if (user.isOwner) items.push({ href: "/activity", label: "Activity Log", icon: "⧗" });
+  if (user.isOwner) items.push({ href: "/admin", label: "Admin", icon: "⚙" });
   items.push({ href: "/notifications", label: unread > 0 ? `Inbox (${unread})` : "Inbox", icon: "◨" });
 
   return (

@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import {
   CAPACITY_H, ME, NOW, PIPELINE, PRIORITY_RANK, TONE_HEX, CLIENT_COLOR,
-  allProjects, dayLabel, daysOverdue, deadlineLabel, isOverdue, isToday, nextStage, rungTag,
+  allCampaigns, dayLabel, daysOverdue, deadlineLabel, isOverdue, isToday, nextStage, rungTag,
   seedTasks, stageIndex, stageTone, withinThisWeek, type Priority, type Task,
 } from "@/lib/myWorkData";
 
@@ -38,7 +38,7 @@ export default function MyWork() {
   function toast(msg: string) { const id = Math.floor(NOW.getTime() % 1e6) + toasts.length + Math.floor(performance.now()); setToasts((t) => [...t, { id, msg }]); setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600); }
   function goto(key: keyof typeof refs) { refs[key].current?.scrollIntoView({ behavior: "smooth", block: "start" }); setFlash(key); setTimeout(() => setFlash(null), 1300); }
 
-  const scoped = useMemo(() => tasks.filter((t) => t.status !== "done" && (project === "all" || t.project === project)), [tasks, project]);
+  const scoped = useMemo(() => tasks.filter((t) => t.status !== "done" && (project === "all" || t.campaign === project)), [tasks, project]);
 
   const overdue = useMemo(() => scoped.filter(isOverdue).sort((a, b) => daysOverdue(b.due) - daysOverdue(a.due)), [scoped]);
   const today = useMemo(() => scoped.filter((t) => !isOverdue(t) && (isToday(t.due) || t.status === "in_progress"))
@@ -147,8 +147,8 @@ export default function MyWork() {
         {/* single optional project filter */}
         <div className="flex items-center gap-2.5">
           <select className="input w-auto" value={project} onChange={(e) => setProject(e.target.value)}>
-            <option value="all">All projects</option>
-            {allProjects(tasks).map((p) => <option key={p} value={p}>{p}</option>)}
+            <option value="all">All campaigns</option>
+            {allCampaigns(tasks).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
       </header>
@@ -273,7 +273,7 @@ function TaskModal({ t, onClose, onMove, onExtend }: { t: Task; onClose: () => v
               {rung && <span className="chip bg-rose-500/90 text-white">{rung}</span>}
             </div>
             <h3 className="mt-2.5 text-[17px] font-semibold tracking-tight text-slate-900">{t.title}</h3>
-            <p className="mt-1 flex items-center gap-1.5 text-[12px] text-slate-500"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: CLIENT_COLOR[t.client] ?? "#8a8a95" }} />{t.client} · {t.project}</p>
+            <p className="mt-1 flex items-center gap-1.5 text-[12px] text-slate-500"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: CLIENT_COLOR[t.client] ?? "#8a8a95" }} />{t.client} · {t.campaign}</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
         </div>

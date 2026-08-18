@@ -87,7 +87,7 @@ async function main() {
 
   // ── Default Project Templates ────────────────────────────────────────
   for (const t of DEFAULT_TEMPLATES) {
-    await db.projectTemplate.create({
+    await db.campaignTemplate.create({
       data: {
         key: t.key,
         name: t.name,

@@ -1,16 +1,13 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
-import Approvals from "@/components/approvals/Approvals";
-
-export const metadata: Metadata = { title: "Approvals" };
-
-// Approvals — one inbox for every decision waiting on you: stage reviews,
-// extension requests, ticket triage. Each is derived from a real item; acting
-// performs the workflow action and logs it. Demo dataset lives client-side.
-export default async function ApprovalsPage() {
-  const user = await getSessionUser();
-  if (!user) redirect("/login");
-  if (!user.isCeo && !user.isLead) redirect("/my-work");
-  return <Approvals />;
+export default function ApprovalsPage() {
+  return (
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-bold">Approvals</h1>
+        <p className="text-sm text-slate-500">Pending reviews and decisions.</p>
+      </header>
+      <div className="card p-6 text-center">
+        <p className="text-slate-600">No pending approvals.</p>
+      </div>
+    </div>
+  );
 }

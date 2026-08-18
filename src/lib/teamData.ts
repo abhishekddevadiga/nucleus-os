@@ -1,60 +1,52 @@
-// Team Structure — org model + helpers.
-// Client-side model: one person registry, many placements, so the same
-// profile can appear across several projects and divisions.
+// Team Structure — shared team model for Aikyaa.
+// One team works across multiple independent businesses.
+// Team members have skills, departments, and are assigned to tasks/campaigns/businesses.
 
 export type AccentKey = "orange" | "violet" | "emerald" | "sky" | "indigo" | "amber" | "fuchsia" | "brand";
 
-export type Person = {
+export type TeamMember = {
   id: string;
   name: string;
   title: string;
-  country: string;
-  flag: string;
+  department?: string;
+  skills: string[];
   photo: number; // pravatar index
-  tasks: number;
+  tasksAssigned: number;
 };
 
-export type Group = { role: string; personIds: string[] };
-export type Project = { id: string; name: string; groups: Group[]; type?: string; archived?: boolean };
-export type Client = { id: string; name: string; kind: "brand" | "client" | "product" | "program"; projects: Project[]; archived?: boolean };
-export type Division = { id: string; name: string; accent: AccentKey; clients: Client[] };
-export type Org = { people: Record<string, Person>; divisions: Division[] };
+export type Department = {
+  id: string;
+  name: string;
+  accent: AccentKey;
+  members: TeamMember[];
+};
 
-// The five role groups every new project starts with (rendered as empty slots).
-export const DEFAULT_ROLES = ["Project Manager", "Communication Manager", "Strategist", "Designer", "Editor"];
-// Flat client/brand index — used to populate the "belongs to" selector.
-export function allClients(org: Org): { id: string; name: string; division: string; divisionId: string }[] {
-  const out: { id: string; name: string; division: string; divisionId: string }[] = [];
-  for (const d of org.divisions) for (const c of d.clients) out.push({ id: c.id, name: c.name, division: d.name, divisionId: d.id });
-  return out;
-}
+export type Team = {
+  members: Record<string, TeamMember>;
+  departments: Department[];
+};
 
-// Canonical role ordering (extensible — unknown roles sort after, alphabetically).
-export const ROLE_ORDER = [
-  "Project Manager",
-  "Communication Manager",
-  "Strategist",
-  "Designer",
-  "Editor",
-  "Front-End Developer",
-  "Back-End Developer",
-  "UX Researcher",
-  "Content Writer",
-  "Marketing Lead",
+// Default skills available across the team
+export const DEFAULT_SKILLS = [
+  "Pcampaign Management",
+  "Communication",
+  "Strategy",
+  "Design",
+  "Front-End Development",
+  "Back-End Development",
+  "Content Writing",
+  "Marketing",
+  "UX Research",
+  "Quality Assurance",
 ];
 
-export const ROLE_ACCENT: Record<string, AccentKey> = {
-  "Project Manager": "sky",
-  "Communication Manager": "indigo",
-  Strategist: "amber",
-  Designer: "violet",
-  Editor: "emerald",
-  "Front-End Developer": "brand",
-  "Back-End Developer": "emerald",
-  "UX Researcher": "fuchsia",
-  "Content Writer": "sky",
-  "Marketing Lead": "orange",
-};
+// Default departments
+export const DEFAULT_DEPARTMENTS: Department[] = [
+  { id: "operations", name: "Operations", accent: "sky", members: [] },
+  { id: "product", name: "Product & Design", accent: "violet", members: [] },
+  { id: "engineering", name: "Engineering", accent: "emerald", members: [] },
+  { id: "marketing", name: "Marketing", accent: "orange", members: [] },
+];
 
 export const ACCENT: Record<AccentKey, { pill: string; bar: string; ring: string; dot: string }> = {
   orange: { pill: "bg-orange-100 text-orange-700", bar: "bg-orange-700", ring: "ring-orange-700/40", dot: "bg-orange-700" },
@@ -67,70 +59,35 @@ export const ACCENT: Record<AccentKey, { pill: string; bar: string; ring: string
   brand: { pill: "bg-brand-100 text-brand-700", bar: "bg-brand-500", ring: "ring-brand-500/40", dot: "bg-brand-500" },
 };
 
-export function roleAccent(role: string): AccentKey {
-  return ROLE_ACCENT[role] ?? "sky";
+export function departmentAccent(dept: Department): AccentKey {
+  return dept.accent;
 }
 
-export function orderedGroups(project: Project): Group[] {
-  return [...project.groups]
-    .filter((g) => g.personIds.length > 0 || true)
-    .sort((a, b) => {
-      const ia = ROLE_ORDER.indexOf(a.role);
-      const ib = ROLE_ORDER.indexOf(b.role);
-      if (ia === -1 && ib === -1) return a.role.localeCompare(b.role);
-      if (ia === -1) return 1;
-      if (ib === -1) return -1;
-      return ia - ib;
-    });
+export function seedTeam(): Team {
+  const members: Record<string, TeamMember> = {};
+  const departments = JSON.parse(JSON.stringify(DEFAULT_DEPARTMENTS));
+  return { members, departments };
 }
 
-export function projectPeopleIds(p: Project): string[] {
-  return Array.from(new Set(p.groups.flatMap((g) => g.personIds)));
-}
-export function clientPeopleIds(c: Client): string[] {
-  return Array.from(new Set(c.projects.flatMap(projectPeopleIds)));
-}
-export function divisionPeopleIds(d: Division): string[] {
-  return Array.from(new Set(d.clients.flatMap(clientPeopleIds)));
-}
+// ---- Backward compatibility exports (for Phase 3 rebuild) ----
+// These exist to maintain compatibility with TeamStructure component
+// which is still using the old demo data model. Will be replaced in Phase 3.
 
-export function personPlacements(org: Org, personId: string): { division: string; client: string; project: string; role: string }[] {
-  const out: { division: string; client: string; project: string; role: string }[] = [];
-  for (const d of org.divisions)
-    for (const c of d.clients)
-      for (const p of c.projects)
-        for (const g of p.groups)
-          if (g.personIds.includes(personId)) out.push({ division: d.name, client: c.name, project: p.name, role: g.role });
-  return out;
+export type Org = any;
+export type Person = TeamMember;
+export type Client = { id: string; name: string; kind?: string; accent?: string; projects: any[]; archived?: boolean };
+export type Campaign = { id: string; name: string; type?: string; groups: any[]; archived?: boolean };
+
+export const DEFAULT_ROLES = ["Pcampaign Manager", "Communication Manager", "Strategist", "Designer", "Editor"];
+
+export function seedOrg() {
+  return { people: {}, divisions: DEFAULT_DEPARTMENTS };
 }
 
-export function allRoles(org: Org): string[] {
-  const s = new Set<string>(ROLE_ORDER);
-  for (const d of org.divisions) for (const c of d.clients) for (const p of c.projects) for (const g of p.groups) s.add(g.role);
-  return Array.from(s);
-}
-
-export function allProjects(org: Org): { id: string; name: string; divisionId: string; clientName: string }[] {
-  const out: { id: string; name: string; divisionId: string; clientName: string }[] = [];
-  for (const d of org.divisions) for (const c of d.clients) for (const p of c.projects) out.push({ id: p.id, name: p.name, divisionId: d.id, clientName: c.name });
-  return out;
-}
-
-// ---- Starter structure ------------------------------------------------------
-// Ships empty on purpose. Add your own divisions below (or leave the three
-// generic ones), then add clients, projects, and people from the Team screen.
-
-const PEOPLE: Person[] = [];
-
-const DIVISIONS: Division[] = [
-  { id: "services", name: "Client Services", accent: "sky", clients: [] },
-  { id: "products", name: "Products", accent: "violet", clients: [] },
-  { id: "internal", name: "Internal", accent: "emerald", clients: [] },
-];
-
-export function seedOrg(): Org {
-  const people: Record<string, Person> = {};
-  for (const p of PEOPLE) people[p.id] = p;
-  // deep clone divisions so state mutations don't touch the seed
-  return { people, divisions: JSON.parse(JSON.stringify(DIVISIONS)) };
-}
+export function allRoles() { return DEFAULT_SKILLS; }
+export function allCampaigns() { return []; }
+export function allClients() { return []; }
+export function projectPeopleIds() { return []; }
+export function orderedGroups(p: any) { return []; }
+export function roleAccent(role: string): AccentKey { return "sky"; }
+export function personPlacements() { return []; }

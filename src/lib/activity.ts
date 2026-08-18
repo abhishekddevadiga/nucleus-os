@@ -14,8 +14,8 @@ export interface LogEntry {
   fromValue?: string | null;
   toValue?: string | null;
   meta?: Record<string, unknown>;
-  projectId?: string | null;
-  clientId?: string | null;
+  campaignId?: string | null;
+  businessId?: string | null;
   taskId?: string | null;
 }
 
@@ -30,8 +30,8 @@ export async function logActivity(entry: LogEntry) {
       fromValue: entry.fromValue ?? null,
       toValue: entry.toValue ?? null,
       meta: entry.meta ? JSON.stringify(entry.meta) : null,
-      projectId: entry.projectId ?? null,
-      clientId: entry.clientId ?? null,
+      campaignId: entry.campaignId ?? null,
+      businessId: entry.businessId ?? null,
       taskId: entry.taskId ?? null,
     },
   });

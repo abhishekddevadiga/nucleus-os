@@ -14,7 +14,7 @@ export const BRAND = {
   name: process.env.NEXT_PUBLIC_APP_NAME ?? "Aikyaa",
 
   /** Full product name — used in page titles and the login screen. */
-  productName: process.env.NEXT_PUBLIC_APP_PRODUCT_NAME ?? "Aikyaa",
+  productName: process.env.NEXT_PUBLIC_APP_PRODUCT_NAME ?? "Aikyaa.space",
 
   /** One-line description used in metadata. */
   description:

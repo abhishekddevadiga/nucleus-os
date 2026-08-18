@@ -10,7 +10,7 @@ export const CAPACITY_H = 40;
 export type Priority = "urgent" | "high" | "medium" | "low";
 export type Status = "todo" | "in_progress" | "done";
 export type Task = {
-  id: string; title: string; client: string; project: string; vertical: string; stage: string;
+  id: string; title: string; client: string; campaign: string; vertical: string; stage: string;
   due: string; priority: Priority; est: number; status: Status; isTicket?: boolean; escalation: 0 | 1 | 2 | 3 | 4;
 };
 
@@ -84,4 +84,4 @@ export const PRIORITY_RANK: Record<Priority, number> = { urgent: 0, high: 1, med
 const TASKS: Task[] = [];
 
 export function seedTasks(): Task[] { return TASKS.map((t) => ({ ...t })); }
-export function allProjects(tasks: Task[]) { return Array.from(new Set(tasks.map((t) => t.project))).sort(); }
+export function allCampaigns(tasks: Task[]) { return Array.from(new Set(tasks.map((t) => t.campaign))).sort(); }

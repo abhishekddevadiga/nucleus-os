@@ -1,8 +1,8 @@
 {
-  "name": "aikyaa",
+  "name": "aikyaa-space",
   "version": "1.0.0",
   "private": true,
-  "description": "Operating system for managing multiple independent businesses — one team, one workspace. Projects, tasks, assets, milestones, and an immutable activity log.",
+  "description": "Aikyaa.space — Operating system for managing multiple independent businesses — one team, one workspace. Campaigns, tasks, assets, milestones, and an immutable activity log.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -19,7 +19,7 @@
   "dependencies": {
     "@prisma/client": "^6.5.0",
     "bcryptjs": "^3.0.2",
-    "next": "^15.1.6",
+    "next": "^16.3.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -33,5 +33,8 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.1"
   }
 }

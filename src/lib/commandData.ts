@@ -17,7 +17,7 @@ export const DIVISIONS: { id: Division; label: string }[] = [
 export type Business = { id: string; name: string; division: Division; kind: "client" | "brand" | "product" | "program" };
 export type Person = { id: string; name: string; role: string; photo: number; loadH: number; capacityH: number };
 export type Vertical = { name: string; progress: number };
-export type Project = {
+export type Campaign = {
   id: string; name: string; businessId: string; division: Division;
   health: "on_track" | "at_risk" | "delayed";
   milestone: { name: string; date: string };
@@ -25,7 +25,7 @@ export type Project = {
 };
 export type TaskStatus = "in_progress" | "blocked" | "done";
 export type Task = {
-  id: string; title: string; assigneeId: string; businessId: string; projectId: string; division: Division;
+  id: string; title: string; assigneeId: string; businessId: string; campaignId: string; division: Division;
   vertical: string; stage: string; status: TaskStatus; due: string; completedAt?: string;
   escalation: 0 | 1 | 2 | 3 | 4; blockedReason?: string;
 };
@@ -41,7 +41,7 @@ export type Extension = { id: string; taskId: string; requestedBy: string; extra
 
 export const BUSINESSES: Business[] = [];
 export const PEOPLE: Person[] = [];
-export const PROJECTS: Project[] = [];
+export const PROJECTS: Campaign[] = [];
 export const TASKS: Task[] = [];
 export const DEALS: Deal[] = [];
 export const INVOICES: Invoice[] = [];

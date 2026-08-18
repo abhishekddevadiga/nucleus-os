@@ -35,5 +35,5 @@ export async function body<T = Record<string, unknown>>(req: Request): Promise<T
 }
 
 export function requireCeo(user: SessionUser) {
-  if (!user.isCeo) throw new ForbiddenError("Only CEO/Ops can do this.");
+  if (!user.isOwner) throw new ForbiddenError("Only CEO/Ops can do this.");
 }

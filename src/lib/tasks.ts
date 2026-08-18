@@ -6,7 +6,7 @@ import { PRIORITIES, CHANGE_REQUEST_SLUG } from "./constants";
 import type { SessionUser } from "./auth";
 
 // Task service — the enforcement point for the system's hard rules:
-//   * every task has title, project, vertical, stage, exactly one assignee,
+//   * every task has title, campaign, vertical, stage, exactly one assignee,
 //     a non-null due date, priority, estimate
 //   * deadline edits require a reason; original date is preserved forever;
 //     assignees cannot edit their own deadlines
@@ -21,7 +21,7 @@ export class ForbiddenError extends Error {
 
 export interface CreateTaskInput {
   title: string;
-  projectId: string;
+  campaignId: string;
   verticalId: string;
   stageId?: string; // defaults to first stage of the vertical
   assigneeId: string;
@@ -29,7 +29,6 @@ export interface CreateTaskInput {
   priority?: string;
   estimateHours?: number;
   description?: string;
-  tags?: string;
   masterTaskId?: string;
   isTicket?: boolean;
   ticketType?: string;
@@ -41,8 +40,8 @@ export interface CreateTaskInput {
 export async function createTask(actor: SessionUser, input: CreateTaskInput) {
   const title = input.title?.trim();
   if (!title) throw new ValidationError("Task title is required.");
-  if (!input.projectId) throw new ValidationError("Task must belong to a project.");
-  if (!input.verticalId) throw new ValidationError("Task must belong to a vertical.");
+  if (!input.campaignId) throw new ValidationError("Task must belong to a project.");
+  if (!input.verticalId) throw new ValidationError("Task must belong to a workstream.");
   if (!input.assigneeId) throw new ValidationError("Task must have exactly one assignee.");
   if (!input.dueDate) throw new ValidationError("Task cannot be saved without a due date.");
   const dueDate = new Date(input.dueDate);
@@ -53,31 +52,31 @@ export async function createTask(actor: SessionUser, input: CreateTaskInput) {
   }
 
   const [project, attached, assignee] = await Promise.all([
-    db.project.findFirst({ where: { id: input.projectId, archivedAt: null } }),
-    db.projectVertical.findFirst({
-      where: { projectId: input.projectId, verticalId: input.verticalId },
-      include: { vertical: { include: { stages: { where: { archivedAt: null }, orderBy: { sortOrder: "asc" } } } } },
+    db.campaign.findFirst({ where: { id: input.campaignId, archivedAt: null } }),
+    db.campaignWorkstream.findFirst({
+      where: { campaignId: input.campaignId, workstreamId: input.verticalId },
+      include: { workstream: { include: { stages: { where: { archivedAt: null }, orderBy: { sortOrder: "asc" } } } } },
     }),
     db.user.findFirst({ where: { id: input.assigneeId, archivedAt: null } }),
   ]);
-  if (!project) throw new ValidationError("Project not found or archived.");
-  if (!attached) throw new ValidationError("That vertical is not attached to this project.");
+  if (!project) throw new ValidationError("Pcampaign not found or archived.");
+  if (!attached) throw new ValidationError("That workstream is not attached to this project.");
   if (!assignee) throw new ValidationError("Assignee not found.");
-  const stages = attached.vertical.stages;
+  const stages = attached.workstream.stages;
   if (!stages.length) throw new ValidationError("Vertical has no pipeline stages.");
   const stage = input.stageId ? stages.find((s) => s.id === input.stageId) : stages[0];
   if (!stage) throw new ValidationError("Stage does not belong to this vertical.");
 
   if (input.masterTaskId) {
-    const master = await db.task.findFirst({ where: { id: input.masterTaskId, projectId: input.projectId } });
+    const master = await db.task.findFirst({ where: { id: input.masterTaskId, campaignId: input.campaignId } });
     if (!master) throw new ValidationError("Master task for this variation was not found in the project.");
   }
 
   const task = await db.task.create({
     data: {
       title,
-      projectId: input.projectId,
-      verticalId: input.verticalId,
+      campaignId: input.campaignId,
+      workstreamId: input.verticalId,
       stageId: stage.id,
       assigneeId: input.assigneeId,
       creatorId: actor.id,
@@ -86,7 +85,6 @@ export async function createTask(actor: SessionUser, input: CreateTaskInput) {
       priority,
       estimateHours: input.estimateHours ?? 0,
       description: input.description?.trim() || null,
-      tags: input.tags?.trim() || null,
       masterTaskId: input.masterTaskId || null,
       isTicket: input.isTicket ?? false,
       ticketType: input.isTicket ? input.ticketType ?? "change" : null,
@@ -108,8 +106,8 @@ export async function createTask(actor: SessionUser, input: CreateTaskInput) {
     action: "created",
     toValue: stage.name,
     meta: { title, assigneeId: input.assigneeId, dueDate: dueDate.toISOString() },
-    projectId: project.id,
-    clientId: project.clientId,
+    campaignId: project.id,
+    businessId: project.businessId,
     taskId: task.id,
   });
 
@@ -128,11 +126,11 @@ export async function createTask(actor: SessionUser, input: CreateTaskInput) {
 export async function moveTaskStage(actor: SessionUser, taskId: string, stageId: string) {
   const task = await db.task.findFirst({
     where: { id: taskId, archivedAt: null },
-    include: { stage: true, project: true, vertical: { include: { stages: { where: { archivedAt: null } } } }, assetLinks: true },
+    include: { stage: true, campaign: true, workstream: { include: { stages: { where: { archivedAt: null } } } }, assetLinks: true },
   });
   if (!task) throw new ValidationError("Task not found.");
-  const target = task.vertical.stages.find((s) => s.id === stageId);
-  if (!target) throw new ValidationError("Stage does not belong to this task's vertical.");
+  const target = task.workstream.stages.find((s) => s.id === stageId);
+  if (!target) throw new ValidationError("Stage does not belong to this task's workstream.");
   if (target.id === task.stageId) return task;
 
   const nowCompleted = target.isTerminal;
@@ -149,8 +147,7 @@ export async function moveTaskStage(actor: SessionUser, taskId: string, stageId:
     action: "stage_moved",
     fromValue: task.stage.name,
     toValue: target.name,
-    projectId: task.projectId,
-    clientId: task.project.clientId,
+    campaignId: task.campaignId,
     taskId: task.id,
   });
 
@@ -159,14 +156,14 @@ export async function moveTaskStage(actor: SessionUser, taskId: string, stageId:
   if (nowCompleted) {
     const outputIds = task.assetLinks.filter((l) => l.direction === "output").map((l) => l.assetId);
     if (outputIds.length) {
-      await db.asset.updateMany({ where: { id: { in: outputIds } }, data: { isDeliverable: true } });
+      // TODO: Implement deliverable tracking (schema doesn't have isDeliverable field yet)
+      // await db.asset.updateMany({ where: { id: { in: outputIds } }, data: { isDeliverable: true } });
       await logActivity({
         entityType: "asset",
         entityId: outputIds[0],
         action: "deliverable_registered",
         meta: { assetIds: outputIds, fromTask: task.id },
-        projectId: task.projectId,
-        clientId: task.project.clientId,
+        campaignId: task.campaignId,
         taskId: task.id,
       });
     }
@@ -189,18 +186,18 @@ export async function changeDueDate(
 
   const task = await db.task.findFirst({
     where: { id: taskId, archivedAt: null },
-    include: { project: true },
+    include: { campaign: true },
   });
   if (!task) throw new ValidationError("Task not found.");
 
-  const managers = await getProjectManagers(task.projectId);
-  const isManager = actor.isCeo || managers.includes(actor.id);
+  const managers = await getProjectManagers(task.campaignId);
+  const isManager = actor.isOwner || managers.includes(actor.id);
   if (!opts.viaExtensionApproval) {
     if (task.assigneeId === actor.id && !isManager) {
       throw new ForbiddenError("Assignees cannot edit their own deadlines. Submit an extension request instead.");
     }
     if (!isManager) throw new ForbiddenError("Only the PM or CEO can change deadlines.");
-    if (task.deadlineLocked && !actor.isCeo) {
+    if (task.deadlineLocked && !actor.isOwner) {
       throw new ForbiddenError("Deadline edits are locked on this task (escalation T+48h). Only CEO/Ops can change it.");
     }
   }
@@ -227,8 +224,7 @@ export async function changeDueDate(
     fromValue: task.dueDate.toISOString(),
     toValue: due.toISOString(),
     meta: { reason, originalDueDate: task.originalDueDate.toISOString(), viaExtensionApproval: !!opts.viaExtensionApproval },
-    projectId: task.projectId,
-    clientId: task.project.clientId,
+    campaignId: task.campaignId,
     taskId: task.id,
   });
 
@@ -245,7 +241,7 @@ export async function requestExtension(actor: SessionUser, taskId: string, reque
   if (!reason?.trim()) throw new ValidationError("A reason is required.");
   const date = new Date(requestedDate);
   if (isNaN(date.getTime())) throw new ValidationError("Invalid date.");
-  const task = await db.task.findFirst({ where: { id: taskId, archivedAt: null }, include: { project: true } });
+  const task = await db.task.findFirst({ where: { id: taskId, archivedAt: null }, include: { campaign: true } });
   if (!task) throw new ValidationError("Task not found.");
 
   const request = await db.extensionRequest.create({
@@ -259,11 +255,10 @@ export async function requestExtension(actor: SessionUser, taskId: string, reque
     action: "created",
     toValue: date.toISOString(),
     meta: { reason },
-    projectId: task.projectId,
-    clientId: task.project.clientId,
+    campaignId: task.campaignId,
     taskId,
   });
-  const managers = await getProjectManagers(task.projectId);
+  const managers = await getProjectManagers(task.campaignId);
   await notifyMany(managers, {
     type: "extension",
     title: `Extension requested: ${task.title}`,
@@ -276,12 +271,12 @@ export async function requestExtension(actor: SessionUser, taskId: string, reque
 export async function decideExtension(actor: SessionUser, requestId: string, approve: boolean, note?: string) {
   const request = await db.extensionRequest.findUnique({
     where: { id: requestId },
-    include: { task: { include: { project: true } } },
+    include: { task: { include: { campaign: true } } },
   });
   if (!request) throw new ValidationError("Extension request not found.");
   if (request.status !== "pending") throw new ValidationError("Request already decided.");
-  const managers = await getProjectManagers(request.task.projectId);
-  if (!actor.isCeo && !managers.includes(actor.id)) {
+  const managers = await getProjectManagers(request.task.campaignId);
+  if (!actor.isOwner && !managers.includes(actor.id)) {
     throw new ForbiddenError("Only the PM or CEO can decide extension requests.");
   }
 
@@ -302,8 +297,7 @@ export async function decideExtension(actor: SessionUser, requestId: string, app
     action: approve ? "approved" : "rejected",
     toValue: request.requestedDate.toISOString(),
     meta: { note },
-    projectId: request.task.projectId,
-    clientId: request.task.project.clientId,
+    campaignId: request.task.campaignId,
     taskId: request.taskId,
   });
 
@@ -329,7 +323,7 @@ export async function decideExtension(actor: SessionUser, requestId: string, app
 export async function reassignTask(actor: SessionUser, taskId: string, assigneeId: string) {
   const task = await db.task.findFirst({
     where: { id: taskId, archivedAt: null },
-    include: { assignee: true, project: true },
+    include: { assignee: true, campaign: true },
   });
   if (!task) throw new ValidationError("Task not found.");
   const assignee = await db.user.findFirst({ where: { id: assigneeId, archivedAt: null } });
@@ -345,8 +339,7 @@ export async function reassignTask(actor: SessionUser, taskId: string, assigneeI
     action: "reassigned",
     fromValue: task.assignee.name,
     toValue: assignee.name,
-    projectId: task.projectId,
-    clientId: task.project.clientId,
+    campaignId: task.campaignId,
     taskId,
   });
   await notify({
@@ -359,23 +352,25 @@ export async function reassignTask(actor: SessionUser, taskId: string, assigneeI
   return updated;
 }
 
-export async function getChangeRequestVertical() {
-  const vertical = await db.vertical.findUnique({ where: { slug: CHANGE_REQUEST_SLUG } });
-  if (!vertical) throw new ValidationError("Change Requests vertical is missing.");
-  return vertical;
+export async function getChangeRequestVertical(businessId: string) {
+  const workstream = await db.workstream.findFirst({ where: { businessId, slug: CHANGE_REQUEST_SLUG } });
+  if (!workstream) throw new ValidationError("Change Requests workstream is missing.");
+  return workstream;
 }
 
-// Tickets are tasks in the Change Request vertical. Ensures the
-// vertical is attached to the project, then creates the ticket-task.
+// Tickets are tasks in the Change Request workstream. Ensures the
+// workstream is attached to the campaign, then creates the ticket-task.
 export async function raiseTicket(
   actor: SessionUser,
   input: Omit<CreateTaskInput, "verticalId" | "isTicket"> & { ticketType: string }
 ) {
-  const vertical = await getChangeRequestVertical();
-  await db.projectVertical.upsert({
-    where: { projectId_verticalId: { projectId: input.projectId, verticalId: vertical.id } },
-    create: { projectId: input.projectId, verticalId: vertical.id },
+  const campaign = await db.campaign.findUnique({ where: { id: input.campaignId }, select: { businessId: true } });
+  if (!campaign) throw new ValidationError("Campaign not found.");
+  const workstream = await getChangeRequestVertical(campaign.businessId);
+  await db.campaignWorkstream.upsert({
+    where: { campaignId_workstreamId: { campaignId: input.campaignId, workstreamId: workstream.id } },
+    create: { campaignId: input.campaignId, workstreamId: workstream.id },
     update: {},
   });
-  return createTask(actor, { ...input, verticalId: vertical.id, isTicket: true });
+  return createTask(actor, { ...input, verticalId: workstream.id, isTicket: true });
 }

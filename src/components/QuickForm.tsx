@@ -36,7 +36,7 @@ export default function QuickForm({
   submitLabel: string;
   title?: string;
   alwaysOpen?: boolean;
-  redirectTemplate?: string; // e.g. "/projects/{id}" — {key} filled from response
+  redirectTemplate?: string; // e.g. "/campaigns/{id}" — {key} filled from response
   extra?: Record<string, unknown>; // constant fields merged into the payload
 }) {
   const router = useRouter();
